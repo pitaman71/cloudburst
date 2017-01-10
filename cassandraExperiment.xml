@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hive name="CassandraExperiment">
+    <goalProto name="startCassandraNode" symbol="goal">
+        <variable name="nodeUser" type="username"/>
+        <variable name="nodeAddress" type="usa.darpa.rfc971.ipv4address"/>
+        <variable name="nodeIdentity" type="localFilePath"/>
+        <variable name="dseUser" type="username"/>
+        <variable name="dsePassword" type="password"/>
+        <pre><defined><rvalue>goal.nodeUser</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.nodeAddress</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
+    </goalProto>
+    <method name="startCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
+        <DISABLE-pre>
+            <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
+        </DISABLE-pre>
+        <taskSequence>
+            <tempFile name="dataStaxYumRepo">
+[datastax]
+name = DataStax Repo for DataStax Enterprise
+baseurl=https://<rvalue>goal.dseUser</rvalue>:<rvalue>goal.dsePassword</rvalue>@rpm.datastax.com/enterprise
+enabled=1
+gpgcheck=0
+            </tempFile>
+            <task name="cpYumConfigForDatastax" symbol="task" onFail="pauseAndAsk">
+                <shell>
+                    <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.dataStaxYumRepo.path</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue>:datastax.repo
+                    </send>
+                </shell>
+            </task>
+            <task name="copyDSEReposFile" symbol="task" onFail="pauseAndAsk">
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <send>sudo cp ~<rvalue>goal.nodeUser</rvalue>/datastax.repo /etc/yum.repos.d/</send>
+                </shell>
+            </task>
+            <task name="installJava1.8" symbol="task" onFail="pauseAndAsk">
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <send>sudo yum -y install java-1.8.0</send>
+                    <send>sudo yum -y remove java-1.7.0-openjdk</send>
+                </shell>
+            </task>
+            <task name="installDSE" symbol="task" onFail="pauseAndAsk">
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <send>sudo yum -y install dse-full</send>
+                </shell>
+            </task>
+            <task name="startDSEService" symbol="task" onFail="pauseAndAsk">
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <send>sudo service dse start</send>
+                </shell>
+            </task>
+        </taskSequence>
+    </method>
+</hive>
