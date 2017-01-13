@@ -15,18 +15,28 @@ Features:
 * Interactive repair for interrupted/failed objectives
 
 - [ ] Distributed Recipes: explicit ssh prefix
-    - [x] hive_cli: list command
-    - [x] hive_cli: plan command
-    - [x] hive_cli: execute command
-    - [x] hive_cli: expression interpretation
+    - [x] Goal.plan
+    - [x] Goal.pursue
+    - [x] Goal.execute 
+    - [x] ExprResult
     - [x] hive_cli: shell interface
     - [ ] UC Tested
     - [ ] UC Documented
 - [ ] Peer to Peer cloud: hive_daemon
-    - [ ] hived: factor shared code out of hive_cli
-    - [ ] hived: static authorization (authority, email, capability, lifetime) in permissions.xml
-    - [ ] hived: static neighborhood in neighborhood.xml
-    - [ ] hived: cache authenticated sessions
+    - [x] hive_agency: factor shared code out of hive_cli
+    - [x] class Config: represents initial, partial, proposed, corrected, validated, completed variable state for each Goal
+    - [ ] class Invocation 
+    - [ ] hive_agency: "hello" command returns agency config
+    - [ ] hive_agency: "agents" lists local agents
+    - [ ] hive_agency: "programs" lists local programs
+    - [ ] hive_agency: "start(programName)" begins a new agent and returns agent detail
+    - [ ] hive_agency: "examine(agentName)" returns agent detail
+    - [ ] hive_agency: "suspend(agentName)" suspends a running agent and returns agent detail
+    - [ ] hive_agency: "resume(agentName)" resumes a suspended agent and returns agent detail
+    - [ ] hive_agency: "stop(agentName)" terminates an agent
+    - [ ] hive_agency: static authorization (authority, email, capability, lifetime) in permissions.xml
+    - [ ] hive_agency: static neighborhood in neighborhood.xml
+    - [ ] hive_agency: cache authenticated sessions
 - [ ] Distributed Recipes: dynamically provisioning EC2 instances
 - [ ] Distributed Recipes: direct and indirect recipes
     - [ ] goal.pursue should automatically select local or remote recipe
