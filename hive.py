@@ -35,6 +35,74 @@ class LineNumberingParser(ElementTree.XMLParser):
         element._end_byte_index = self.parser.CurrentByteIndex
         return element
 
+class ElementTreeWriter:
+    def __init__(self):
+        self.stack = []
+        self.root = None
+
+    def begin(self,tag):
+        myNode = ElementTree.Element(tag)
+        if(len(self.stack)>0):
+            self.stack[len(self.stack)-1].append(myNode)
+        else:
+            self.root = myNode
+        self.stack.push(myNode)        
+
+    def end(self,tag):
+        self.stack.pop()
+
+    def object(self,thing):
+        self.begin(self.__class__.__name)
+        for attrib,value in self.__dict__.iteritems():
+            self.child(value,attrib)
+        self.end(self.__class__.__name)
+
+    def child(self,thing,attrib):
+        if type(thing) in (tuple,list):
+            for item in thing:
+                self.object(item)
+        elif type(thing) in (dict):
+            for item in thing:
+                self.object(item)
+        elif __dict__ in thing:
+            self.begin(attrib)
+            self.object(thing)
+            self.end(attrib)
+        else:
+            self.set(attrib,thing)
+
+class ElementTreeReader:
+    def __init__(self,xmlRoot):
+        self.stack = []
+        self.root = xmlRoot
+
+    def begin(self,tag):
+        myNode = ElementTree.Element(tag)
+        if(len(self.stack)>0):
+            self.stack[len(self.stack)-1].append(myNode)
+        else:
+            self.root = myNode
+        self.stack.push(myNode)        
+
+    def end(self,tag):
+        self.stack.pop()
+
+    def object(self,thing):
+        self.begin(self.__class__.__name)
+        for attrib,value in self.__dict__.iteritems():
+            self.child(value,attrib)
+        self.end(self.__class__.__name)
+
+#    def child(self,thing,attrib):
+#        if type(thing) in (tuple,list):
+#        elif type(thing) in (dict):
+#        elif __dict__ in thing:
+#            self.begin(attrib)
+#            self.object(thing)
+#            self.end(attrib)
+#        else
+#            self.set(attrib,thing)
+
 def defaultEvalContext(desc):
     result = Config(desc)
     result.root.lookupTermList(True,['node','platform'],None).setValue(sys.platform)
@@ -44,10 +112,10 @@ def defaultEvalContext(desc):
     return result
 
 class Solver:
-    def __init__(self,xmlDoc,solverArgs,remainingArgString):
+    def __init__(self,xmlAgentProgram,solverArgs,remainingArgString):
         self.goals = []
         self.result = True
-        self.xmlDoc = xmlDoc
+        self.xmlAgentProgram = xmlAgentProgram
         self.args = solverArgs
         self.remainingArgString = remainingArgString
 
@@ -133,7 +201,7 @@ class EvalResult:
             if self.isBinaryOperator(self.expr.get('name')):
                 interpreted = True
                 if(len(childResults) != 2):
-                    self.createErrorAt(self.expr,'Wrong number of arguments for operator '+self.expr.get('name'))
+                    self.createError('Wrong number of arguments for operator '+self.expr.get('name'))
                 elif (not childResults[0].isSuccess()):
                     self.addError(childResults[0].errors)
                 elif (not childResults[1].isSuccess()):
@@ -151,12 +219,12 @@ class EvalResult:
         elif self.expr.tag == 'defined':
             interpreted = True
             if(len(childResults) != 1):
-                self.createErrorAt(self.expr,'Wrong number of arguments for defined')
+                self.createError('Wrong number of arguments for defined')
             else:
                 self.doDefined(childResults[0])
 
         if not interpreted:
-            self.createErrorAt(self.expr,'Cannot interpret this expression')
+            self.createError('Cannot interpret this expression')
 
         if self.solver.args.verbose:
             print 'END   evaluating expression '+ElementTree.tostring(self.expr)+' result: '+(str(self.value) if self.isSuccess() else 'Undefined')
@@ -270,14 +338,14 @@ class Goal:
             print 'BEGIN Pursuing this goal: '+self.toString()
 
         if not self.proto and self.isSuccess():
-            protos = self.solver.xmlDoc.findall('goalProto[@name=\''+self.name+'\']')        
+            protos = self.solver.xmlAgentProgram.findall('goalProto[@name=\''+self.name+'\']')        
             if(len(protos) == 0):
                 self.solver.reportError(self.name+' is undefined')
                 return
             self.setProto(protos[len(protos)-1])
 
         if not self.method and self.isSuccess():
-            methods = self.solver.xmlDoc.findall('method[@targetGoalType=\''+self.name+'\']')
+            methods = self.solver.xmlAgentProgram.findall('method[@targetGoalType=\''+self.name+'\']')
             if(len(methods) == 0):
                 self.solver.reportError(self.name+' has no methods defined')
                 return

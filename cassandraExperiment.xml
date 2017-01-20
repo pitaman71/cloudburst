@@ -47,11 +47,26 @@
         <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
         <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
         <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
-    </goalProto>    
+    </goalProto>
+    <goalProto name="installDSEGLoader" symbol="goal">
+        <variable name="workDir" type="localFilePath"/>
+        <variable name="nodeUser" type="username"/>
+        <variable name="nodeAddress" type="usa.darpa.rfc971.ipv4address"/>
+        <variable name="nodeIdentity" type="localFilePath"/>
+        <variable name="dseUser" type="username"/>
+        <variable name="dsePassword" type="password"/>
+        <pre><defined><rvalue>goal.workDir</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.nodeUser</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.nodeAddress</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
+    </goalProto>
     <method name="setupCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="setupCassandraNode" goalSymbol="goal">
         <DISABLE-pre>
             <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <tempFile name="dataStaxYumRepo">
 [datastax]
@@ -91,6 +106,7 @@ gpgcheck=0
         <DISABLE-pre>
             <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <task name="startDSEService" symbol="task" onFail="pauseAndAsk">
                 <shell>
@@ -104,6 +120,7 @@ gpgcheck=0
         <DISABLE-pre>
             <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <task name="stopDSEService" symbol="task" onFail="pauseAndAsk">
                 <shell>
@@ -117,11 +134,27 @@ gpgcheck=0
         <DISABLE-pre>
             <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <task name="uninstallDSE" symbol="task" onFail="pauseAndAsk">
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
                     <send>sudo yum -y remove dse-full</send>
+                </shell>
+            </task>
+        </taskSequence>
+    </method>
+    <method name="installDSEGLoaderOverSSHFromLinuxToEC2" targetGoalType="installDSEGLoader" goalSymbol="goal">
+        <referenceDoc><url>https://docs.datastax.com/en/latest-dse/datastax_enterprise/graph/dgl/dglInstall.html</url></referenceDoc>
+        <taskSequence>
+            <task name="installLoader" symbol="task" onFail="pauseAndAsk">
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <send>mkdir -p <rvalue>goal.workDir</rvalue></send>
+                    <send>cd <rvalue>goal.workDir</rvalue></send>
+                    <send>wget --user <rvalue>goal.dseUser</rvalue> --password <rvalue>goal.dsePassword</rvalue> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
+                    <send>tar xvfz dse-graph-loader.tar.gz</send>
+                    <send>find . -type f</send>
                 </shell>
             </task>
         </taskSequence>
