@@ -40,58 +40,109 @@ class ElementTreeWriter:
         self.stack = []
         self.root = None
 
-    def begin(self,tag):
+    def begin(self,tag,attrib=dict()):
         myNode = ElementTree.Element(tag)
         if(len(self.stack)>0):
             self.stack[len(self.stack)-1].append(myNode)
         else:
             self.root = myNode
+        for key in attrib.keys():
+            myNode.set(key,attrib[key])
         self.stack.push(myNode)        
 
     def end(self,tag):
         self.stack.pop()
 
     def object(self,thing):
-        self.begin(self.__class__.__name)
-        for attrib,value in self.__dict__.iteritems():
-            self.child(value,attrib)
-        self.end(self.__class__.__name)
+        self.begin(thing.__class__.__name)
+        for attrib,value in thing.__dict__.iteritems():
+            self.subordinate(thing,attrib,value)
+        self.end(thing.__class__.__name)
 
-    def child(self,thing,attrib):
+    def subordinate(self,parentObj,attribName,thing):
         if type(thing) in (tuple,list):
+            # parentObj attribute is a list
             for item in thing:
+                self.begin(attribName)
                 self.object(item)
+                self.end(attribName)
         elif type(thing) in (dict):
-            for item in thing:
-                self.object(item)
+            # parentObj attribute is a plain dict
+            for key in thing.keys():
+                self.begin(attribName,dict(key=key))
+                self.object(thing[key])
+                self.end(attribName)
         elif __dict__ in thing:
-            self.begin(attrib)
+            # parentObj attribute is another object
+            self.begin(attribName)
             self.object(thing)
-            self.end(attrib)
+            self.end(attribName)
         else:
-            self.set(attrib,thing)
+            # parentObj attribute is a scalar value
+            self.begin(attribName)
+            self.stack[len(self.stack)-1].text = thing
+            self.end(attribName)
 
 class ElementTreeReader:
     def __init__(self,xmlRoot):
         self.stack = []
         self.root = xmlRoot
+        self.named = dict()
+        self.unnamed = []
 
-    def begin(self,tag):
-        myNode = ElementTree.Element(tag)
-        if(len(self.stack)>0):
-            self.stack[len(self.stack)-1].append(myNode)
-        else:
-            self.root = myNode
-        self.stack.push(myNode)        
+    def parse(self):
+        self.parseNode(self.root)
 
-    def end(self,tag):
-        self.stack.pop()
+    def isClass(self,className):
+        classHandle = getattr(sys.modules[__name__], className)
+        return classHandle != None
+
+    def spawnClass(self,className):
+        classHandle = getattr(sys.modules[__name__], className)
+        if classHandle == None:
+            raise InternalError('Cannot find class named '+className)
+        return classHandle()
+
+    def parseNode(self,node):
+        self.stack.push(node)
+        obj = self.spawnClass(node.tag)
+        self.object(obj)
+        self.stack.pop(node)
+        return obj
 
     def object(self,thing):
+        isGlobal = (len(self.stack) == 0)
+        isNamed = 'name' in thing
         self.begin(self.__class__.__name)
-        for attrib,value in self.__dict__.iteritems():
-            self.child(value,attrib)
+        for attrib,value in thing.__dict__.iteritems():
+            self.subordinate(thing,attrib,value)
         self.end(self.__class__.__name)
+        if isNamed:
+            self.named[thing]
+
+    def subordinate(self,parentObj,attribName,thing):
+        if type(thing) in (tuple,list):
+            # parentObj attribute is a list
+            for childNode in self.stack[len(self.stack)-1]:
+                if childNode.tag == attribName:
+                    childObj = parseNode(childNode)
+                    thing.append(childObj)
+        elif type(thing) in (dict):
+            # parentObj attribute is a plain dict
+            for childNode in self.stack[len(self.stack)-1]:
+                if childNode.tag == attribName:
+                    key = childNode.tag
+                    value = childNode.get('key')
+                    childObj = parseNode(childNode)
+                    thing[key] = childObj
+        elif __dict__ in thing:
+            # parentObj attribute is another object
+            self.begin(attribName)
+            self.object(thing)
+            self.end(attribName)
+        else:
+            # parentObj attribute is a scalar value
+            parentObj.set(attribName,thing)
 
 #    def child(self,thing,attrib):
 #        if type(thing) in (tuple,list):
@@ -103,17 +154,10 @@ class ElementTreeReader:
 #        else
 #            self.set(attrib,thing)
 
-def defaultEvalContext(desc):
-    result = Config(desc)
-    result.root.lookupTermList(True,['node','platform'],None).setValue(sys.platform)
-    result.root.lookupTermList(True,['node','uname'],None).setValue(os.uname())
-    result.root.lookupTermList(True,['node','hostname'],None).setValue(socket.gethostname())
-    result.root.lookupTermList(True,['node','hostip'],None).setValue(socket.gethostbyname(socket.gethostname()))
-    return result
-
 class Solver:
     def __init__(self,xmlAgentProgram,solverArgs,remainingArgString):
         self.goals = []
+        self.state = Config(xmlAgentProgram.getroot().get('name'),'State of agent '+xmlAgentProgram.getroot().get('name'))
         self.result = True
         self.xmlAgentProgram = xmlAgentProgram
         self.args = solverArgs
@@ -141,21 +185,58 @@ class Solver:
         print 'ERROR: '+errMsg
         self.result = False
 
+    def hasErrors(self):
+        return len(self.errors) > 0
+
+    def initialize(self):
+        for stateNode in self.xmlAgentProgram.findall('state'):
+            if self.args.verbose:
+                print 'BEGIN Processing <state> element at '+str(stateNode._start_line_number)
+            self.state.root.initState(self,stateNode)
+            if self.args.verbose:
+                print 'END   Processing <state> element at '+str(stateNode._start_line_number)
+
+#    def terminate(self):
+        # nothing to do        
+
+    def defaultEvalContext(self,goalName,desc):
+        result = Config(goalName,desc)
+        result.copyFrom(self.state)
+
+        result.root.initPath('Solver.defaultEvalContext',['host','platform'],sys.platform)
+        result.root.initPath('Solver.defaultEvalContext',['host','uname'],os.uname())
+        result.root.initPath('Solver.defaultEvalContext',['host','hostname'],socket.gethostname())
+        result.root.initPath('Solver.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
+        return result
+
 class EvalResult:
-    def __init__(self,solver,context,xmlExpr):
+    def __init__(self,solver,context):
         self.solver = solver
         self.context=context
         self.errors = []
+
+    def setXML(self,xmlExpr):
         self.expr=xmlExpr
+        self.label = '%s:%d.%d' % (self.expr._file_name,self.expr._start_line_number,self.expr._start_column_number)
+
+    def setString(self,text):
+        self.text=text
+        self.label = '"%s"' % text
 
     def setValue(self,value):
         self.value = value
+
+    def getRvalue(self):
+        if isinstance(self.value,ConfigNode):
+            return self.value.getValue()
+        else:
+            return self.value
 
     def addError(self,error):
         self.errors.append(error)
 
     def createError(self,error):
-        errMsg = '%s:%d.%d: %s' % (self.expr._file_name,self.expr._start_line_number,self.expr._start_column_number,error)
+        errMsg = '%s: %s' % (self.label,error)
         self.errors.append(errMsg)
 
     def isSuccess(self):
@@ -180,21 +261,50 @@ class EvalResult:
         else:
             self.createError('Unrecognized operator: '+op)
 
-    def doString(self,text):
-        self.value = text
+    def doStruct(self,xml):
+        self.value = dict()
+        for child in xml:
+            subResult = EvalResult(self.solver,self.context)
+            subResult.setXML(child)
+            if 'name' not in subResult:
+                subResult.createError('XML child of structure must have attribute \'name\'')
+            elif not subResult.isSuccess():
+                subResult.createError('Cannot evaluate sub-expression')
+            else:
+                self.value.set(subResult.name,subResult)
+
+    def doVariable(self,xml):
+        self.value = self.context.root.lookupString(True,xml.get('name'),self)
 
     def doDefined(self,a):
         self.value = a.isSuccess()
+        if self.solver.args.verbose and not a.isSuccess():
+            for error in a.errors:                
+                print error
 
     def evaluate(self):
+        if 'expr' in self.__dict__:
+            self.doXML()
+        elif 'text' in self.__dict__:
+            self.doText()
+        else:
+            self.createError('Must call EvalResult.setXML or EvalResult.setString before calling EvalResult.evaluate')
+
+    def doXML(self):
         childResults = []
         for child in self.expr:
-            sub = EvalResult(self.solver,self.context,child)
+            sub = EvalResult(self.solver,self.context)
+            sub.setXML(child)
             sub.evaluate()
+            childResults.append(sub)
+        if len(childResults) == 0 and self.expr.text:
+            sub = EvalResult(self.solver,self.context)
+            sub.setString(self.expr.text)
+            sub.doText()
             childResults.append(sub)
 
         if self.solver.args.verbose:
-            print 'BEGIN evaluating expression '+ElementTree.tostring(self.expr)
+            print 'BEGIN evaluating expression '+self.expr.tag+' at '+self.label
 
         interpreted = False
         if self.expr.tag == 'op':
@@ -209,26 +319,49 @@ class EvalResult:
                 else:
                     self.doBinaryOperator(self.expr.get('name'),childResults[0],childResults[1])
         elif self.expr.tag == 'rvalue':
-            interpreted = True
-            node = self.context.root.lookupElement(False,self.expr,self)
-            if node != None:
-                self.value = node.selected
+            if(len(childResults) == 0):
+                self.createError('<'+self.expr.tag+'> must always have a child expression')
+            else:
+                interpreted = True
+                self.setValue(childResults[0].value)
         elif self.expr.tag == 'string':
+            if(len(childResults) == 0):
+                self.createError('<'+self.expr.tag+'> must always have a child expression')
+            else:
+                interpreted = True
+                self.setValue(childResults[0].value)
+        elif self.expr.tag == 'struct':
             interpreted = True
-            self.doString(self.expr.text)
+            self.doDict(self.expr)
+        elif self.expr.tag == 'variable':
+            self.doVariable(self.expr)
+            if len(childResults) == 0:
+                self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
+            elif not childResults[0].isSuccess():
+                self.addError(childResults[0].errors[0])
+            else:
+                interpreted = True
+                self.setValue(childResults[len(childResults)-1].value)
         elif self.expr.tag == 'defined':
-            interpreted = True
             if(len(childResults) != 1):
                 self.createError('Wrong number of arguments for defined')
             else:
                 self.doDefined(childResults[0])
+                interpreted = True
 
-        if not interpreted:
+        if not interpreted and len(self.errors) == 0:
             self.createError('Cannot interpret this expression')
 
         if self.solver.args.verbose:
-            print 'END   evaluating expression '+ElementTree.tostring(self.expr)+' result: '+(str(self.value) if self.isSuccess() else 'Undefined')
+            print 'END   evaluating expression '+self.expr.tag+' at '+self.label+' with result: '+(jsonpickle.encode(self.getRvalue()) if self.isSuccess() else 'Undefined')
 
+
+    def doText(self):
+        cfgNode = self.context.root.lookupString(False,self.text,None)
+        if cfgNode != None:
+            self.value = cfgNode
+        else:
+            self.value = self.text
 
 class Goal:
     def __init__(self,solver):
@@ -242,20 +375,39 @@ class Goal:
 
     def setProto(self,xmlProto):
         self.proto = xmlProto
-        print "Goal "+self.name+" has symbol "+xmlProto.get('symbol')
+
+        # allocate state for <variable> tags under <goalProto>
         self.variables = xmlProto.findall('variable')
+        for variable in self.variables:                
+            lhs = self.context.root.lookupTermList(True,[self.proto.get('symbol'),variable.get('name')],EvalResult(self.solver,self.context).setXML(variable))
+            rhs = EvalResult(self.solver,self.context)
+            rhs.setXML(variable)
+            rhs.evaluate()
+            if lhs != None and rhs != None and rhs.isSuccess():
+                lhs.setValue(rhs.value)
+
+        # handle state overrides from cmdline
         parser = argparse.ArgumentParser()
-        for variable in self.variables:
-            parser.add_argument('--'+variable.get('name'))
-        args = parser.parse_args(self.args)
-        for variable in self.variables:
-            if variable.get('name') in args:
-                value = eval('args.'+variable.get('name'))
-                if(value != None):
-                    path = xmlProto.get('symbol')+'.'+variable.get('name')
-                    print path+' = '+value
-                    node = self.context.root.lookupTermList(True,[self.proto.get('symbol'),variable.get('name')],self)
-                    node.setValue(value)
+        parser.add_argument('assignments',nargs='*')
+        goalArgs = parser.parse_args(self.args)
+        for assignment in goalArgs.assignments:
+            tokens = assignment.split('=')
+            if len(tokens) != 2:
+                self.createError('Expected goal assignments but instead found command line argument: '+assignment)
+            else:
+#                print 'DEBUG: parsed command-line assignment of '+tokens[0]+' := '+tokens[1]
+                lhs = self.context.root.lookupTermList(False,tokens[0].split('.'),EvalResult(self.solver,self.context).setString(tokens[1]))
+                rhs = EvalResult(self.solver,self.context)
+                rhs.setString(tokens[1])
+                rhs.evaluate()
+                if lhs == None:
+                    self.createError('Unable to evaluate '+tokens[0])
+#                elif rhs == None:
+#                    self.createError('Unable to evaluate'+tokens[1])
+                elif not rhs.isSuccess():
+                    self.addError(rhs.errors[0])
+                else:
+                    lhs.setValue(rhs.value)
 
     def allocVariable(self,varName):
         node = self.context.root.lookupTermList(True,[self.proto.get('symbol'),varName],self)
@@ -283,13 +435,8 @@ class Goal:
         return len(self.errors) == 0
 
     def cfgTopGoal(self):
-        self.context = defaultEvalContext('Evaluation context for goal '+self.name)
+        self.context = self.solver.defaultEvalContext(self.name,'Evaluation context for goal '+self.name)
         self.args = self.solver.remainingArgString
-
-    def evaluate(self,context,xmlExpr):
-        result = EvalResult(self.solver,context,xmlExpr)
-        result.evaluate()
-        return result
 
     def checkPre(self):
         preChecks = self.proto.findall('pre')
@@ -299,7 +446,9 @@ class Goal:
             self.checkExpr(preCheck)
 
     def checkExpr(self,preCheck):
-        checkResult = self.evaluate(self.context,preCheck[0])
+        checkResult = EvalResult(self.solver,self.context)
+        checkResult.setXML(preCheck[0])
+        checkResult.evaluate()
         if not checkResult.isSuccess():
             if(self.solver.args.verbose):
                 print "ERROR: While checking <%s>," % preCheck.tag
@@ -374,19 +523,20 @@ class Goal:
         if elt.text:
             cmd += elt.text
         for child in elt:
-            if(ElementTree.iselement(elt)):
-                sub = EvalResult(self.solver,self.context,child)
+            if(ElementTree.iselement(child)):
+                sub = EvalResult(self.solver,self.context)
+                sub.setXML(child)
                 sub.evaluate()
                 if sub.isSuccess():
-                    cmd += sub.value
+                    cmd += sub.getRvalue()
                 else:
                     cmd += ElementTree.tostring(child)
             else:
                 cmd += child.text
             if child.tail:
                 cmd += child.tail
-        if elt.tail:
-            cmd += elt.tail
+#        if elt.tail:
+#            cmd += elt.tail
         return cmd
 
     def execute(self,stmt):
@@ -477,9 +627,54 @@ class ConfigNode:
         self.selected = None
         self.fields = dict()
         self.elements = []
+        self.parent = None
+
+    def copyFrom(self,other):
+        for otherVal in other.values:
+            self.values.append(otherVal)
+        for otherElement in other.elements:
+            self.elements.append(otherElement)
+        if other.selected != None:
+            self.selected = other.selected
+#            print 'copyFrom '+self.getPath('.')+' := '+other.getPath('.')+' == '+jsonpickle.encode(self.selected)
+        for key,field in other.fields.iteritems():
+            if key not in self.fields:
+                self.fields[key] = ConfigNode(self.rootConfig,key)
+                self.fields[key].setParent(self)
+            self.fields[key].copyFrom(other.fields[key])
+
+    def initState(self,solver,xml):
+        if xml.tag == 'struct' or xml.tag == 'state':
+#            if self.getValue() == None:
+#                struct = dict()
+#                self.setValue(struct)
+#                print 'initState sets '+self.getPath('.')+' to new struct'
+#            else:
+#                struct = self.getValue()
+            for child in xml:
+                node = self.lookupTermList(True,[child.get('name')],solver)
+                node.initState(solver,child)
+#                struct[child.get('name')] = node.getValue()
+        elif xml.tag == 'variable':
+            if xml.text != '':
+                result = EvalResult(solver,solver.state)
+                result.setXML(xml)
+                result.evaluate()
+                if not result.isSuccess():
+                    print 'Unable to interpret this XML expression: '+result.errors[0]
+                else:
+                    self.setValue(result.value)
+
+    def initPath(self,method,symbolPath,value):
+        configNode = self.lookupTermList(True,symbolPath,None)
+#        print method+' sets '+configNode.getPath('.')+' to '+jsonpickle.encode(value)
+        configNode.setValue(value)
 
     def setValue(self,value):
-        self.selected = value
+        if isinstance(value,ConfigNode):
+            self.copyFrom(value)
+        else:
+            self.selected = value
 
     def getValue(self):
         return self.selected        
@@ -490,7 +685,7 @@ class ConfigNode:
     def getPath(self,char):
         result = ''
         if self.parent:
-            result += self.parent.getPath()
+            result += self.parent.getPath(char)
             result += char
         result += self.name
         return result
@@ -526,29 +721,41 @@ class ConfigNode:
             return lvalue.elements[xmlExpr.get('index')]
 
     def lookupString(self,create,pathString,errHandler):
+        if pathString == '':
+            raise InternalError('pathString is empty')
         pathTerms = pathString.split('.')
         return self.lookupTermList(create,pathTerms,errHandler)
 
     def lookupTermList(self,create,pathTerms,errHandler):
         result = None
+#        print 'DEBUG: BEGIN lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         if(len(pathTerms) == 0):
             result = self
+#            print 'DEBUG: no more path terms'
         else:
+            if pathTerms[0] == '':
+                raise InternalError('empty field name')
             if pathTerms[0] not in self.fields:
+#                print 'DEBUG: field '+pathTerms[0]+' is missing from '+self.getPath('.')
                 if create:
                     newNode = ConfigNode(self.rootConfig,pathTerms[0])
                     newNode.setParent(self)
                     self.fields[pathTerms[0]] = newNode
                 elif errHandler:
-                    errHandler.createError('No field named '+pathTerms[0])
+                    errHandler.createError('No field named '+pathTerms[0]+' in expression '+self.getPath('.')+' fields include '+(','.join(self.fields.keys())))
+                    return None
+                else:
+#                    print 'DEBUG: END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
                     return None
 
+#            print 'DEBUG: found field named '+pathTerms[0]
             result = self.fields[pathTerms[0]].lookupTermList(create,pathTerms[1:],errHandler)
+#        print 'DEBUG: END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         return result
 
 class Config:
-    def __init__(self,desc):
-        self.root = ConfigNode(self,'')
+    def __init__(self,name,desc):
+        self.root = ConfigNode(self,name)
         self.desc = desc
 
     def setup(self,xmlProto):
@@ -559,6 +766,9 @@ class Config:
     def toString(self):
         return self.desc
 
+    def copyFrom(self,other):
+        self.root.copyFrom(other.root)
+
 class Invocation:
     def __init__(self,command):
         self.command = command
@@ -566,7 +776,7 @@ class Invocation:
         self.state = 'init'
 
     def default(self):
-        first = Config('Default context for '+self.toString())
+        first = Config(self.command,'Default context for '+self.toString())
         first.setup(self.command.xmlProto)
         self.series.push(first)
 

@@ -1,102 +1,110 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <hive name="CassandraExperiment">
+    <state>
+        <struct name="i-02e3afedc1a92b410" type="EC2Node">
+            <struct name="credentials" type="SSHCredentials">
+                <variable name="user" type="username">ec2-user</variable>
+                <variable name="address" type="usa.darpa.rfc971.ipv4address">54.89.82.240</variable>
+                <struct name="certificate" type="SSLCertificate">
+                    <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
+                </struct>
+            </struct>
+        </struct>
+        <struct name="i-0375a11f5e322ee0d" type="EC2Node">
+            <struct name="credentials" type="SSHCredentials">
+                <variable name="user" type="username">ec2-user</variable>
+                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.23.220.50</variable>
+                <struct name="certificate" type="SSLCertificate">
+                    <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
+                </struct>
+            </struct>
+        </struct>
+        <struct name="alansDseCredentials" type="PasswordCredentials">
+            <variable name="user" type="username">alan.pita_98458</variable>
+            <variable name="password" type="usa.darpa.rfc971.ipv4address">LAn4Iv6S</variable>
+        </struct>
+    </state>
     <goalProto name="setupCassandraNode" symbol="goal">
-        <variable name="nodeUser" type="username"/>
-        <variable name="nodeAddress" type="usa.darpa.rfc971.ipv4address"/>
-        <variable name="nodeIdentity" type="localFilePath"/>
-        <variable name="dseUser" type="username"/>
-        <variable name="dsePassword" type="password"/>
-        <pre><defined><rvalue>goal.nodeUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeAddress</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
+        <variable name="node" type="EC2Node"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="startCassandraNode" symbol="goal">
-        <variable name="nodeUser" type="username"/>
-        <variable name="nodeAddress" type="usa.darpa.rfc971.ipv4address"/>
-        <variable name="nodeIdentity" type="localFilePath"/>
-        <variable name="dseUser" type="username"/>
-        <variable name="dsePassword" type="password"/>
-        <pre><defined><rvalue>goal.nodeUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeAddress</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
+        <variable name="node" type="EC2Node"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="stopCassandraNode" symbol="goal">
-        <variable name="nodeUser" type="username"/>
-        <variable name="nodeAddress" type="usa.darpa.rfc971.ipv4address"/>
-        <variable name="nodeIdentity" type="localFilePath"/>
-        <variable name="dseUser" type="username"/>
-        <variable name="dsePassword" type="password"/>
-        <pre><defined><rvalue>goal.nodeUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeAddress</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
+        <variable name="node" type="EC2Node"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="retireCassandraNode" symbol="goal">
-        <variable name="nodeUser" type="username"/>
-        <variable name="nodeAddress" type="usa.darpa.rfc971.ipv4address"/>
-        <variable name="nodeIdentity" type="localFilePath"/>
-        <variable name="dseUser" type="username"/>
-        <variable name="dsePassword" type="password"/>
-        <pre><defined><rvalue>goal.nodeUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeAddress</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
+        <variable name="node" type="EC2Node"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="installDSEGLoader" symbol="goal">
         <variable name="workDir" type="localFilePath"/>
-        <variable name="nodeUser" type="username"/>
-        <variable name="nodeAddress" type="usa.darpa.rfc971.ipv4address"/>
-        <variable name="nodeIdentity" type="localFilePath"/>
-        <variable name="dseUser" type="username"/>
-        <variable name="dsePassword" type="password"/>
-        <pre><defined><rvalue>goal.workDir</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeAddress</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.nodeIdentity</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseUser</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dsePassword</rvalue></defined></pre>
+        <variable name="node" type="EC2Node"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <method name="setupCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="setupCassandraNode" goalSymbol="goal">
         <DISABLE-pre>
-            <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <tempFile name="dataStaxYumRepo">
 [datastax]
 name = DataStax Repo for DataStax Enterprise
-baseurl=https://<rvalue>goal.dseUser</rvalue>:<rvalue>goal.dsePassword</rvalue>@rpm.datastax.com/enterprise
+baseurl=https://<rvalue>goal.dseCreds.user</rvalue>:<rvalue>goal.dseCreds.password</rvalue>@rpm.datastax.com/enterprise
 enabled=1
 gpgcheck=0
             </tempFile>
             <task name="cpYumConfigForDatastax" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.dataStaxYumRepo</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue>:datastax.repo
+                    <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.dataStaxYumRepo</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue>:datastax.repo
                     </send>
                 </shell>
             </task>
             <task name="copyDSEReposFile" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
-                    <send>sudo cp ~<rvalue>goal.nodeUser</rvalue>/datastax.repo /etc/yum.repos.d/</send>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                    <send>sudo cp ~<rvalue>goal.node.credentials.user</rvalue>/datastax.repo /etc/yum.repos.d/</send>
                 </shell>
             </task>
             <task name="installJava1.8" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo yum -y install java-1.8.0</send>
                     <send>sudo yum -y remove java-1.7.0-openjdk</send>
                 </shell>
             </task>
             <task name="installDSE" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo yum -y install dse-full</send>
                 </shell>
             </task>
@@ -104,13 +112,13 @@ gpgcheck=0
     </method>
     <method name="startCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
         <DISABLE-pre>
-            <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <task name="startDSEService" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo service dse start</send>
                 </shell>
             </task>
@@ -118,13 +126,13 @@ gpgcheck=0
     </method>
     <method name="stopCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="stopCassandraNode" goalSymbol="goal">
         <DISABLE-pre>
-            <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <task name="stopDSEService" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo service dse stop</send>
                 </shell>
             </task>
@@ -132,13 +140,13 @@ gpgcheck=0
     </method>
     <method name="retireCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="retireCassandraNode" goalSymbol="goal">
         <DISABLE-pre>
-            <op name="eq"><rvalue>node.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <taskSequence>
             <task name="uninstallDSE" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo yum -y remove dse-full</send>
                 </shell>
             </task>
@@ -149,10 +157,10 @@ gpgcheck=0
         <taskSequence>
             <task name="installLoader" symbol="task" onFail="pauseAndAsk">
                 <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.nodeIdentity</rvalue> <rvalue>goal.nodeUser</rvalue>@<rvalue>goal.nodeAddress</rvalue></command>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>mkdir -p <rvalue>goal.workDir</rvalue></send>
                     <send>cd <rvalue>goal.workDir</rvalue></send>
-                    <send>wget --user <rvalue>goal.dseUser</rvalue> --password <rvalue>goal.dsePassword</rvalue> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
+                    <send>wget --user <rvalue>goal.dseCreds.user</rvalue> --password <rvalue>goal.dseCreds.password</rvalue> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
                     <send>tar xvfz dse-graph-loader.tar.gz</send>
                     <send>find . -type f</send>
                 </shell>
