@@ -1,8 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <hive name="CassandraExperiment">
     <state>
+        <struct name="AlanPersonalOnEC2" type="EC2Credentials">
+            <describe locale="en-US">Alan's EC2 account billed to Expero</describe>
+            <variable name="user" type="username">pitaman@austin.rr.com</variable>
+            <variable name="accessKey" type="string">AKIAIM74YASAR6NY7ZQQ</variable>
+            <variable name="secretKey" type="string">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</variable>
+        </struct>
+        <struct name="AlanExperoOnEC2" type="EC2Credentials">
+            <describe locale="en-US">Alan's EC2 account billed to Expero</describe>
+            <variable name="user" type="username">alan.pita</variable>
+            <variable name="password" type="password">1k(2wcZS]+PN</variable>
+            <variable name="accessKey" type="string">FOO</variable>
+            <variable name="secretKey" type="string">BAR</variable>
+        </struct>
+        <struct name="RecommendedEC2ConfigForDSEGDemo" type="EC2ClusterConfiguration">
+            <describe locale="en-US">The recommended cluster configuration in EC2 for a DSEG development or demo exercise</describe>
+            <referenceDoc><url>https://docs.google.com/document/d/1IWGEkeJQy82lFBZhXm0CgS5wUO5oHqq3AWv4y3XwcGw/edit#heading=h.30j0zll</url></referenceDoc>
+            <variable name="numNodes" type="int">6</variable>
+            <variable name="nodeType" type="string">m3.large</variable>
+            <variable name="image" type="string">ami-9be6f38c</variable>
+        </struct>
         <struct name="i-02e3afedc1a92b410" type="EC2Node">
+            <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
             <struct name="credentials" type="SSHCredentials">
+                <describe locale="en-US">SSH/TLS username and certificate</describe>
                 <variable name="user" type="username">ec2-user</variable>
                 <variable name="address" type="usa.darpa.rfc971.ipv4address">54.89.82.240</variable>
                 <struct name="certificate" type="SSLCertificate">
@@ -11,7 +33,9 @@
             </struct>
         </struct>
         <struct name="i-0375a11f5e322ee0d" type="EC2Node">
+            <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
             <struct name="credentials" type="SSHCredentials">
+                <describe locale="en-US">SSH/TLS username and certificate</describe>
                 <variable name="user" type="username">ec2-user</variable>
                 <variable name="address" type="usa.darpa.rfc971.ipv4address">52.23.220.50</variable>
                 <struct name="certificate" type="SSLCertificate">
@@ -20,11 +44,13 @@
             </struct>
         </struct>
         <struct name="alansDseCredentials" type="PasswordCredentials">
+            <describe locale="en-US">Alan's Datastax userid (free)</describe>
             <variable name="user" type="username">alan.pita_98458</variable>
-            <variable name="password" type="usa.darpa.rfc971.ipv4address">LAn4Iv6S</variable>
+            <variable name="password" type="password">LAn4Iv6S</variable>
         </struct>
     </state>
     <goalProto name="setupCassandraNode" symbol="goal">
+        <describe locale="en-US">Configure EC2 node to run the Datastax Enterprise Graph Example</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
@@ -34,6 +60,7 @@
         <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="startCassandraNode" symbol="goal">
+        <describe locale="en-US">Start the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
@@ -43,6 +70,7 @@
         <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="stopCassandraNode" symbol="goal">
+        <describe locale="en-US">Stop the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
@@ -52,6 +80,7 @@
         <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="retireCassandraNode" symbol="goal">
+        <describe locale="en-US">Dismantle EC2 node configuration</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
@@ -61,6 +90,7 @@
         <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <goalProto name="installDSEGLoader" symbol="goal">
+        <describe locale="en-US">Install (optional) DSEG Loader tool</describe>
         <variable name="workDir" type="localFilePath"/>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
@@ -71,11 +101,12 @@
         <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
     </goalProto>
     <method name="setupCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="setupCassandraNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
             <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
-        <taskSequence>
+        <do>
             <tempFile name="dataStaxYumRepo">
 [datastax]
 name = DataStax Repo for DataStax Enterprise
@@ -108,53 +139,65 @@ gpgcheck=0
                     <send>sudo yum -y install dse-full</send>
                 </shell>
             </task>
-        </taskSequence>
+            <task name="fix_cassandra_yaml" symbol="task" onFail="pauseAndAsk">
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                    <send>sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
+                    <send>sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
+                    <send>sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
+                </shell>
+            </task>
+        </do>
     </method>
     <method name="startCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
             <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
-        <taskSequence>
+        <do>
             <task name="startDSEService" symbol="task" onFail="pauseAndAsk">
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo service dse start</send>
                 </shell>
             </task>
-        </taskSequence>
+        </do>
     </method>
     <method name="stopCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="stopCassandraNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
             <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
-        <taskSequence>
+        <do>
             <task name="stopDSEService" symbol="task" onFail="pauseAndAsk">
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo service dse stop</send>
                 </shell>
             </task>
-        </taskSequence>
+        </do>
     </method>
     <method name="retireCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="retireCassandraNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
             <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
-        <taskSequence>
+        <do>
             <task name="uninstallDSE" symbol="task" onFail="pauseAndAsk">
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
                     <send>sudo yum -y remove dse-full</send>
                 </shell>
             </task>
-        </taskSequence>
+        </do>
     </method>
     <method name="installDSEGLoaderOverSSHFromLinuxToEC2" targetGoalType="installDSEGLoader" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <referenceDoc><url>https://docs.datastax.com/en/latest-dse/datastax_enterprise/graph/dgl/dglInstall.html</url></referenceDoc>
-        <taskSequence>
+        <do>
             <task name="installLoader" symbol="task" onFail="pauseAndAsk">
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
@@ -165,6 +208,90 @@ gpgcheck=0
                     <send>find . -type f</send>
                 </shell>
             </task>
-        </taskSequence>
+        </do>
+    </method>
+    <goalProto name="installHomebrew" symbol="goal">
+        <describe locale="en-US">Ensure that Homebrew is installed on host</describe>
+        <post><op name="isZero"><shell value="returnCode"><send>which brew</send></shell></op></post>
+    </goalProto>
+    <method name="installHomebrew" targetGoalType="installHomebrew" symbol="goal">
+        <describe locale="en-US">using ruby command</describe>
+        <referenceDoc><url>http://brew.sh</url></referenceDoc>
+        <do>
+            <task name="install" symbol="task" onFail="pauseAndAsk">
+                <shell><send>/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"</send></shell>
+            </task>
+        </do>
+    </method>
+    <goalProto name="installToolViaHomebrew" symbol="goal">
+        <describe locale="en-US">Ensure that <rvalue>goal.toolName</rvalue> is installed via Mac OS X Homebrew</describe>
+        <variable name="toolName" type="programName"/>
+        <post><op name="isZero"><shell value="returnCode"><send>which <rvalue>goal.toolName</rvalue></send></shell></op></post>
+    </goalProto>
+    <method name="installToolViaHomebrew" targetGoalType="installToolViaHomebrew" symbol="goal">
+        <pre><goalCompleted name="installHomebrew"/></pre>
+        <describe locale="en-US">using brew command</describe>
+        <referenceDoc><url>http://brew.sh</url></referenceDoc>
+        <do>
+            <task name="install" symbol="task" onFail="pauseAndAsk">
+                <shell><send>brew install wget</send></shell>
+            </task>
+        </do>
+    </method>
+    <goalProto name="installEC2CLITools" symbol="goal">
+        <describe locale="en-US">Ensure host has Amazon EC2 command line API installed</describe>
+        <post><fileTest type="exists">ec2</fileTest></post>
+    </goalProto>
+    <method name="installEC2CLIToolsViaWget" targetGoalType="installEC2CLITools" goalSymbol="goal">
+        <pre><goalCompleted name="installToolViaHomebrew"><variable name="toolName">wget</variable></goalCompleted></pre>
+        <do>
+            <task name="fetchZipfile" symbol="task" onFail="pauseAndAsk">
+                <shell><send>wget http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send></shell>
+            </task>
+            <task name="unzipAndInstall" symbol="task" onFail="pauseAndAsk">
+                <shell><send>mkdir -p ec2</send></shell>
+                <shell><send>unzip ec2-api-tools.zip -d ec2</send></shell>
+            </task>
+        </do>
+    </method>
+    <method name="installEC2CLIToolsViaCurl" targetGoalType="installEC2CLITools" goalSymbol="goal">
+        <pre><goalCompleted name="installCurl"/></pre>
+        <do>
+            <task name="fetchZipfile" symbol="task" onFaile="pauseAndAsk">
+                <shell><send>curl -O http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send></shell>
+            </task>
+            <task name="unzipAndInstall" symbol="task" onFail="pauseAndAsk">
+                <shell><send>mkdir -p ec2</send></shell>
+                <shell><send>unzip ec2-api-tools.zip -d ec2</send></shell>
+            </task>
+        </do>
+    </method>
+    <goalProto name="installAnyJava" symbol="goal">
+        <describe locale="en-US">Ensure host has JDK installed</describe>
+        <pre><op name="isZero"><shell value="returnCode"><send>which java</send></shell></op></pre>
+    </goalProto>
+    <method name="installJavaByProbe" symbol="goal" targetGoalType="installAnyJava">
+        <do><shell><send>java -version</send></shell></do>
+    </method>
+    <goalProto name="ProvisionEC2Cluster" symbol="goal">
+        <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
+        <variable name="config" type="EC2ClusterConfiguration"/>
+        <variable name="credentials" type="EC2Credentials"/>
+        <pre><defined><rvalue>goal.config</rvalue></defined></pre>
+        <pre><defined><rvalue>goal.credentials</rvalue></defined></pre>
+    </goalProto>
+    <method name="ProvisionEC2Cluster" symbol="goal" targetGoalType="ProvisionEC2Cluster">
+        <pre><goalCompleted name="installEC2CLITools"/></pre>
+        <pre><goalCompleted name="installAnyJava"/></pre>
+        <do>
+            <repeat name="instances">
+                <count><rvalue>goal.config.numNodes</rvalue></count>
+                <do>
+                    <task name="allocate" symbol="task">
+                        <shell><send>$EC2_HOME/bin/ec2-run-instances <rvalue>goal.config.image</rvalue> -t <rvalue>goal.config.nodeType</rvalue> --associate-public-ip-address true -O <rvalue>goal.credentials.accessKey</rvalue> -W <rvalue>goal.credentials.secretKey</rvalue></send></shell>                    
+                    </task>
+                </do>
+            </repeat>
+        </do>
     </method>
 </hive>

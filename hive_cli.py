@@ -11,6 +11,7 @@ parser.add_argument('--list',action='store_true')
 parser.add_argument('--plan',nargs='?')
 parser.add_argument('--pursue',nargs='?')
 parser.add_argument('--verbose','-v',action='count')
+parser.add_argument('--narrate','-n',action='count')
 tup = parser.parse_known_args()
 solverArgs = tup[0]
 if solverArgs.verbose > 0:
