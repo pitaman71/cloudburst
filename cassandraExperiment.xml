@@ -11,8 +11,9 @@
             <describe locale="en-US">Alan's EC2 account billed to Expero</describe>
             <variable name="user" type="username">alan.pita</variable>
             <variable name="password" type="password">1k(2wcZS]+PN</variable>
-            <variable name="accessKey" type="string">FOO</variable>
-            <variable name="secretKey" type="string">BAR</variable>
+            <variable name="certificateFile" type="localFilePath">
+                ~/.ssh/alan-graph-demo.pem
+            </variable>
         </struct>
         <struct name="RecommendedEC2ConfigForDSEGDemo" type="EC2ClusterConfiguration">
             <describe locale="en-US">The recommended cluster configuration in EC2 for a DSEG development or demo exercise</describe>
@@ -292,6 +293,21 @@ gpgcheck=0
                     </task>
                 </do>
             </repeat>
+        </do>
+    </method>
+    <goalProto name="installDSEOpsCenter" symbol="goal">
+        <describe locale="en-US">Ensure host has Datastax OpsCenter installed</describe>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <pre><goalCompleted name="installToolViaHomebrew"><variable name="toolName">wget</variable></goalCompleted></pre>
+    </goalProto>
+    <method name="installDSEOpsCenter" symbol="goal" targetGoalType="installDSEOpsCenter">
+        <referenceDoc><url>https://docs.datastax.com/en/latest-opscenter/opsc/install/opscInstallTar_t.html</url></referenceDoc>
+        <do>
+            <shell>
+                <send>wget --user <rvalue>goal.dseCreds.user</rvalue> --password <rvalue>goal.dseCreds.password</rvalue> -L http://downloads.datastax.com/enterprise/opscenter.tar.gz</send>
+                <send>tar xvfz opscenter.tar.gz</send>
+                <send>opscenter-*/bin/opscenter</send>
+            </shell>
         </do>
     </method>
 </hive>
