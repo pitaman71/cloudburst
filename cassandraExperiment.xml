@@ -1,20 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <hive name="CassandraExperiment">
     <state>
-        <struct name="AlanPersonalOnEC2" type="EC2Credentials">
-            <describe locale="en-US">Alan's EC2 account billed to Expero</describe>
-            <variable name="user" type="username">pitaman@austin.rr.com</variable>
-            <variable name="accessKey" type="string">AKIAIM74YASAR6NY7ZQQ</variable>
-            <variable name="secretKey" type="string">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</variable>
-        </struct>
-        <struct name="AlanExperoOnEC2" type="EC2Credentials">
-            <describe locale="en-US">Alan's EC2 account billed to Expero</describe>
-            <variable name="user" type="username">alan.pita</variable>
-            <variable name="password" type="password">1k(2wcZS]+PN</variable>
-            <variable name="certificateFile" type="localFilePath">
-                ~/.ssh/alan-graph-demo.pem
-            </variable>
-        </struct>
         <struct name="RecommendedEC2ConfigForDSEGDemo" type="EC2ClusterConfiguration">
             <describe locale="en-US">The recommended cluster configuration in EC2 for a DSEG development or demo exercise</describe>
             <referenceDoc><url>https://docs.google.com/document/d/1IWGEkeJQy82lFBZhXm0CgS5wUO5oHqq3AWv4y3XwcGw/edit#heading=h.30j0zll</url></referenceDoc>
@@ -115,39 +101,34 @@ baseurl=https://<rvalue>goal.dseCreds.user</rvalue>:<rvalue>goal.dseCreds.passwo
 enabled=1
 gpgcheck=0
             </tempFile>
-            <task name="cpYumConfigForDatastax" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.dataStaxYumRepo</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue>:datastax.repo
-                    </send>
-                </shell>
-            </task>
-            <task name="copyDSEReposFile" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>sudo cp ~<rvalue>goal.node.credentials.user</rvalue>/datastax.repo /etc/yum.repos.d/</send>
-                </shell>
-            </task>
-            <task name="installJava1.8" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>sudo yum -y install java-1.8.0</send>
-                    <send>sudo yum -y remove java-1.7.0-openjdk</send>
-                </shell>
-            </task>
-            <task name="installDSE" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>sudo yum -y install dse-full</send>
-                </shell>
-            </task>
-            <task name="fix_cassandra_yaml" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
-                    <send>sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
-                    <send>sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
-                </shell>
-            </task>
+            <shell>
+                <label>cpYumConfigForDatastax</label>
+                <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.dataStaxYumRepo</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue>:datastax.repo
+                </send>
+            </shell>
+            <shell>
+                <label>copyDSEReposFile</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>sudo cp ~<rvalue>goal.node.credentials.user</rvalue>/datastax.repo /etc/yum.repos.d/</send>
+            </shell>
+            <shell>
+                <label>installJava1.8</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>sudo yum -y install java-1.8.0</send>
+                <send>sudo yum -y remove java-1.7.0-openjdk</send>
+            </shell>
+            <shell>
+                <label>installDSE</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>sudo yum -y install dse-full</send>
+            </shell>
+            <shell>
+                <label>fix_cassandra_yaml</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
+                <send>sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
+                <send>sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
+            </shell>
         </do>
     </method>
     <method name="startCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
@@ -157,12 +138,11 @@ gpgcheck=0
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
-            <task name="startDSEService" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>sudo service dse start</send>
-                </shell>
-            </task>
+            <shell>
+                <label>startDSEService</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>sudo service dse start</send>
+            </shell>
         </do>
     </method>
     <method name="stopCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="stopCassandraNode" goalSymbol="goal">
@@ -172,12 +152,11 @@ gpgcheck=0
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
-            <task name="stopDSEService" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>sudo service dse stop</send>
-                </shell>
-            </task>
+            <shell>
+                <label>stopDSEService</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>sudo service dse stop</send>
+            </shell>
         </do>
     </method>
     <method name="retireCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="retireCassandraNode" goalSymbol="goal">
@@ -187,28 +166,26 @@ gpgcheck=0
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
-            <task name="uninstallDSE" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>sudo yum -y remove dse-full</send>
-                </shell>
-            </task>
+            <shell>
+                <label>uninstallDSE</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>sudo yum -y remove dse-full</send>
+            </shell>
         </do>
     </method>
     <method name="installDSEGLoaderOverSSHFromLinuxToEC2" targetGoalType="installDSEGLoader" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <referenceDoc><url>https://docs.datastax.com/en/latest-dse/datastax_enterprise/graph/dgl/dglInstall.html</url></referenceDoc>
         <do>
-            <task name="installLoader" symbol="task" onFail="pauseAndAsk">
-                <shell>
-                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                    <send>mkdir -p <rvalue>goal.workDir</rvalue></send>
-                    <send>cd <rvalue>goal.workDir</rvalue></send>
-                    <send>wget --user <rvalue>goal.dseCreds.user</rvalue> --password <rvalue>goal.dseCreds.password</rvalue> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
-                    <send>tar xvfz dse-graph-loader.tar.gz</send>
-                    <send>find . -type f</send>
-                </shell>
-            </task>
+            <shell>
+                <label>installLoader</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <send>mkdir -p <rvalue>goal.workDir</rvalue></send>
+                <send>cd <rvalue>goal.workDir</rvalue></send>
+                <send>wget --user <rvalue>goal.dseCreds.user</rvalue> --password <rvalue>goal.dseCreds.password</rvalue> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
+                <send>tar xvfz dse-graph-loader.tar.gz</send>
+                <send>find . -type f</send>
+            </shell>
         </do>
     </method>
     <goalProto name="installHomebrew" symbol="goal">
@@ -219,9 +196,10 @@ gpgcheck=0
         <describe locale="en-US">using ruby command</describe>
         <referenceDoc><url>http://brew.sh</url></referenceDoc>
         <do>
-            <task name="install" symbol="task" onFail="pauseAndAsk">
-                <shell><send>/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"</send></shell>
-            </task>
+            <shell>
+                <label>install</label>
+                <send>/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"</send>
+            </shell>
         </do>
     </method>
     <goalProto name="installToolViaHomebrew" symbol="goal">
@@ -234,9 +212,10 @@ gpgcheck=0
         <describe locale="en-US">using brew command</describe>
         <referenceDoc><url>http://brew.sh</url></referenceDoc>
         <do>
-            <task name="install" symbol="task" onFail="pauseAndAsk">
-                <shell><send>brew install wget</send></shell>
-            </task>
+            <shell>
+                <label>install</label>
+                <send>brew install wget</send>
+            </shell>
         </do>
     </method>
     <goalProto name="installEC2CLITools" symbol="goal">
@@ -246,25 +225,29 @@ gpgcheck=0
     <method name="installEC2CLIToolsViaWget" targetGoalType="installEC2CLITools" goalSymbol="goal">
         <pre><goalCompleted name="installToolViaHomebrew"><variable name="toolName">wget</variable></goalCompleted></pre>
         <do>
-            <task name="fetchZipfile" symbol="task" onFail="pauseAndAsk">
-                <shell><send>wget http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send></shell>
-            </task>
-            <task name="unzipAndInstall" symbol="task" onFail="pauseAndAsk">
-                <shell><send>mkdir -p ec2</send></shell>
-                <shell><send>unzip ec2-api-tools.zip -d ec2</send></shell>
-            </task>
+            <shell>
+                <label>fetchZipfile</label>
+                <send>wget http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send>
+            </shell>
+            <shell>
+                <label>unzipAndInstall</label>
+                <send>mkdir -p ec2</send>
+                <send>unzip ec2-api-tools.zip -d ec2</send>
+            </shell>
         </do>
     </method>
     <method name="installEC2CLIToolsViaCurl" targetGoalType="installEC2CLITools" goalSymbol="goal">
         <pre><goalCompleted name="installCurl"/></pre>
         <do>
-            <task name="fetchZipfile" symbol="task" onFaile="pauseAndAsk">
-                <shell><send>curl -O http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send></shell>
-            </task>
-            <task name="unzipAndInstall" symbol="task" onFail="pauseAndAsk">
-                <shell><send>mkdir -p ec2</send></shell>
-                <shell><send>unzip ec2-api-tools.zip -d ec2</send></shell>
-            </task>
+            <shell>
+                <label>fetchZipfile</label>
+                <send>curl -O http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send>
+            </shell>
+            <shell>
+                <label>unzipAndInstall</label>
+                <send>mkdir -p ec2</send>
+                <send>unzip ec2-api-tools.zip -d ec2</send>
+            </shell>
         </do>
     </method>
     <goalProto name="installAnyJava" symbol="goal">
@@ -288,9 +271,10 @@ gpgcheck=0
             <repeat name="instances">
                 <count><rvalue>goal.config.numNodes</rvalue></count>
                 <do>
-                    <task name="allocate" symbol="task">
-                        <shell><send>$EC2_HOME/bin/ec2-run-instances <rvalue>goal.config.image</rvalue> -t <rvalue>goal.config.nodeType</rvalue> --associate-public-ip-address true -O <rvalue>goal.credentials.accessKey</rvalue> -W <rvalue>goal.credentials.secretKey</rvalue></send></shell>                    
-                    </task>
+                    <shell>
+                        <label>allocate</label>
+                        <send>$EC2_HOME/bin/ec2-run-instances <rvalue>goal.config.image</rvalue> -t <rvalue>goal.config.nodeType</rvalue> --associate-public-ip-address true -O <rvalue>goal.credentials.accessKey</rvalue> -W <rvalue>goal.credentials.secretKey</rvalue></send>
+                    </shell>
                 </do>
             </repeat>
         </do>
