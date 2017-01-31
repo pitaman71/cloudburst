@@ -2,6 +2,7 @@ import sys
 import os
 import socket
 import tempfile
+import glob
 
 sys.path.append('/usr/local/lib/python2.7/site-packages')
 
@@ -155,15 +156,74 @@ class ElementTreeReader:
 #            self.set(attrib,thing)
 
 class Solver:
-    def __init__(self,xmlAgentProgram,solverArgs,remainingArgString):
+    def __init__(self,solverArgs,remainingArgString):
         self.goals = []
         self.goalsByName = dict()
-        self.state = Config(xmlAgentProgram.getroot().get('name'),'State of agent '+xmlAgentProgram.getroot().get('name'))
+        self.defByTypeThenName = dict()
+        self.state = Config('Solver','Solver state',self)
         self.result = True
-        self.xmlAgentProgram = xmlAgentProgram
         self.args = solverArgs
         self.remainingArgString = remainingArgString
         self.statementStack = []
+        self.stateDefs = []
+
+    def readFile(self,programFile,mandatory=True):
+        actualPaths = glob.glob(os.path.expanduser(programFile))
+        if len(actualPaths) == 0:
+            if mandatory:
+                self.createError('Input file does not exist: '+programFile)
+            else:
+                print('Input file does not exist: '+programFile)
+
+        for actualPath in actualPaths:
+            if not os.path.isfile(actualPath):
+                if mandatory:
+                    self.createError('Input file does not exist: '+actualPath)
+                else:
+                    print('Input file does not exist: '+actualPath)
+            else:
+                if self.args.verbose > 0:
+                    print 'Reading '+actualPath
+                xmlDoc = ElementTree.parse(actualPath,parser=LineNumberingParser(actualPath))
+                self.readDefinitions(xmlDoc)
+
+    def readDefinitions(self,xmlDefinitions):
+        for element in xmlDefinitions.findall('*'):
+            if 'name' in element.attrib:
+                self.addDefinition(element)
+            elif element.tag == 'state':
+                self.addStateDef(element)
+
+    def addDefinition(self,xmlDefinition):
+        typeName = xmlDefinition.tag
+        defName = xmlDefinition.get('name')
+        if self.args.verbose > 0:
+            print 'Definition of %s %s at %s:%d' % (typeName,defName,xmlDefinition._file_name,xmlDefinition._start_line_number)
+        if typeName not in self.defByTypeThenName:
+            self.defByTypeThenName[typeName] = dict()
+        self.defByTypeThenName[typeName][defName] = xmlDefinition
+
+    def addStateDef(self,xmlDef):
+        self.stateDefs.append(xmlDef)
+
+    def getStateDefs(self):
+        return self.stateDefs
+
+    def getDefinitions(self,typeName):
+        result = []
+        if typeName in self.defByTypeThenName:
+            for defName,defElement in self.defByTypeThenName[typeName].iteritems():
+                result.append(defElement)
+        return result
+
+    def getDefinitionByTypeAndName(self,typeName,defName):
+        if typeName in self.defByTypeThenName:
+#            print 'DEBUG: %d definitions of type %s found' % (len(self.defByTypeThenName[typeName].keys()),typeName)
+            if defName in self.defByTypeThenName[typeName]:
+                defn = self.defByTypeThenName[typeName][defName]
+#                print 'DEBUG: definition of type %s and name %s found at %s:%d' % (typeName,defName,defn._file_name,defn._start_line_number)
+                return defn
+        return None
 
     def hasGoal(self,goal):
         goals = [x for x in self.goals if goal.subsumedBy(x)]
@@ -190,27 +250,33 @@ class Solver:
         return len(self.errors) > 0
 
     def initialize(self):
-        for stateNode in self.xmlAgentProgram.findall('state'):
-            if self.args.verbose:
-                print 'BEGIN Processing <state> element at '+str(stateNode._start_line_number)
+        for stateNode in self.getStateDefs():
+            position = '%s:%d' % (stateNode._file_name,stateNode._start_line_number)
+            if self.args.verbose > 0:
+                print 'BEGIN Processing <state> element at '+position
             self.state.root.initState(self,stateNode)
-            if self.args.verbose:
-                print 'END   Processing <state> element at '+str(stateNode._start_line_number)
+            if self.args.verbose > 0:
+                print 'END   Processing <state> element at '+position
 
 #    def terminate(self):
         # nothing to do        
 
     def defaultEvalContext(self,goalName,desc):
-        result = Config(goalName,desc)
+        result = Config(goalName,desc,self)
         result.copyFrom(self.state)
 
         result.root.initPath('Solver.defaultEvalContext',['host','platform'],sys.platform)
         result.root.initPath('Solver.defaultEvalContext',['host','uname'],os.uname())
         result.root.initPath('Solver.defaultEvalContext',['host','hostname'],socket.gethostname())
         result.root.initPath('Solver.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
+
+        if self.args.verbose > 0:
+            print 'BEGIN defaultEvalContext '+goalName
+            print result.details()
+            print 'END   defaultEvalContext '+goalName
         return result
 
-    def interpolateInner(self,context,elt):
+    def interpolateInner(self,context,elt,errHandler):
         cmd = ''
         if elt.text:
             cmd += elt.text
@@ -222,6 +288,8 @@ class Solver:
                 if sub.isSuccess():
                     cmd += sub.getRvalue()
                 else:
+                    for error in sub.errors:
+                        errHandler.createError(error)
                     cmd += ElementTree.tostring(child)
             else:
                 cmd += child.text
@@ -435,7 +503,7 @@ class Evaluator:
             sub.doText()
             childResults.append(sub)
 
-        if self.solver.args.verbose:
+        if self.solver.args.verbose > 0:
             print 'BEGIN evaluating expression '+self.expr.tag+' at '+self.label
 
         interpreted = False
@@ -458,18 +526,24 @@ class Evaluator:
                     self.addError(childResults[0].errors)
                 else:
                     self.doUnaryOperator(self.expr.get('name'),childResults[0])
-        elif self.expr.tag == 'rvalue' or self.expr.tag == 'string' or self.expr.tag == 'describe':
+        elif self.expr.tag == 'get':
+            self.value = self.context.root.lookupString(False,self.expr.text,self)
+            if self.value == None:
+                self.outcome = self.outcome and EvalOutcomes().setFalse()
+            else:
+                interpreted = True
+        elif self.expr.tag == 'string' or self.expr.tag == 'describe':
             if(len(childResults) == 0):
                 self.createError('<'+self.expr.tag+'> must always have a child expression')
             else:
                 interpreted = True
                 self.setValue(childResults[0].value)
                 self.outcome = self.outcome and childResults[0].outcome
-        elif self.expr.tag == 'struct':
-            interpreted = True
-            self.doDict(self.expr)
+#        elif self.expr.tag == 'struct':
+#            interpreted = True
+#            self.doDict(self.expr)
         elif self.expr.tag == 'variable':
-            self.doVariable(self.expr)
+#            self.doVariable(self.expr)
             if len(childResults) == 0:
                 self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
             elif not childResults[0].isSuccess():
@@ -489,9 +563,9 @@ class Evaluator:
             for child in children:
                 if(child.tag == 'send'):
                     cmd = ''
-                    cmd += self.solver.interpolateInner(self.context,child)
+                    cmd += self.solver.interpolateInner(self.context,child,self)
                     lastReturnCode = pexpect.run(cmd,withexitstatus=1)
-                    if self.solver.args.verbose:
+                    if self.solver.args.verbose > 0:
                         print "SHELL RC "+str(lastReturnCode[1])+" FROM "+cmd
             valueType = self.expr.get('value')
             if(valueType == 'returnCode'):
@@ -502,15 +576,15 @@ class Evaluator:
             if len(childResults) != 1:
                 self.createError('fileTest tag must always have a path as its only child')
             else:
-                if self.solver.args.verbose:
+                if self.solver.args.verbose > 0:
                     print "TESTING FILE "+childResults[0].value
                 if testType == 'exists':
                     interpreted = True
                     self.value = os.path.exists(childResults[0].value)
         elif self.expr.tag == 'goalCompleted':
             goalName = self.expr.get('name')
-            goalConfig = Config(goalName,'Example of completed goal')
-            goalConfig.setup(self.solver,self.expr)
+            goalConfig = Config(goalName,'Example of completed goal',self.solver)
+            goalConfig.setup('goal',self.expr)
             foundGoal = self.solver.findGoal(goalName,goalConfig)
             interpreted = True
             if (foundGoal != None):
@@ -523,7 +597,7 @@ class Evaluator:
         if not interpreted and len(self.errors) == 0:
             self.createError('Cannot interpret this expression')
 
-        if self.solver.args.verbose:
+        if self.solver.args.verbose > 0:
             print 'END   evaluating expression '+self.expr.tag+' at '+self.label+' with result: '+(jsonpickle.encode(self.getRvalue()) if self.isSuccess() else self.getOutcome().tostring())
 
 
@@ -594,9 +668,12 @@ class Goal:
 #                elif rhs == None:
 #                    self.createError('Unable to evaluate'+tokens[1])
                 elif not rhs.isSuccess():
+#                    print 'DEBUG: cannot assign '+lhs.getPath('.')+' := '+jsonpickle.encode(rhs.getValue())
                     self.addError(rhs.errors[0])
                 else:
+#                    print 'DEBUG: assign '+lhs.getPath('.')+' := '+jsonpickle.encode(rhs.getValue())
                     lhs.setValue(rhs.value)
+
 
     def allocVariable(self,varName):
         node = self.context.root.lookupTermList(True,[self.proto.get('symbol'),varName],self)
@@ -623,6 +700,9 @@ class Goal:
 
     def createError(self,error):
         self.errors.append(error)
+
+    def hasErrors(self):
+        return len(self.errors) != 0
 
     def isSuccess(self):
         return len(self.errors) == 0
@@ -670,8 +750,8 @@ class Goal:
                     if self.solver.args.verbose:
                         print 'PRECONDITION REQUIRES SUBGOALS '+str(condition._start_line_number)
                     goalName = xml.get('name')
-                    goalConfig = Config(goalName,'Subgoal configuration')
-                    goalConfig.setup(self.solver,xml)
+                    goalConfig = Config(goalName,'Subgoal configuration',self.solver)
+                    goalConfig.setup('goal',xml)
                     subgoal = Goal(self.solver)
                     subgoal.cfgSubGoal(goalName,self,goalConfig)
                     subgoal.pursue()
@@ -718,16 +798,20 @@ class Goal:
         return result
 
     def pursue(self):
-        if(self.solver.args.verbose):
+        if self.solver.args.verbose > 0:
             print 'BEGIN Pursuing this goal: '+self.toString()
             print self.context.details()
 
         if not self.proto and self.isSuccess():
-            protos = self.solver.xmlAgentProgram.findall('goalProto[@name=\''+self.name+'\']')        
-            if(len(protos) == 0):
+            if self.solver.args.verbose > 0:
+                print 'Searching for prototype for goal '+self.name
+            proto = self.solver.getDefinitionByTypeAndName('goalProto',self.name)        
+            if(proto == None):
                 self.solver.reportError(self.name+' is undefined')
                 return
-            self.setProto(protos[len(protos)-1])
+            self.setProto(proto)
+            if self.solver.args.verbose > 0:
+                print 'Goal %s uses prototype %s at %s:%d' % (self.name,self.proto.get('name'),self.proto._file_name,self.proto._start_line_number)
 
         if self.proto is not None:
             self.solver.beginStatement(self.proto)
@@ -741,11 +825,11 @@ class Goal:
                 checkPostBefore.setXML(post[0])
                 checkPostBefore.evaluate()
                 canSkip = canSkip and checkPostBefore.value
-            if canSkip and self.solver.args.verbose:
+            if canSkip and self.solver.args.verbose > 0:
                 print 'SKIP '+self.toString()+' because postconditions are already satisfied'
 
         if not canSkip and not self.method and self.isSuccess():
-            methods = self.solver.xmlAgentProgram.findall('method[@targetGoalType=\''+self.name+'\']')
+            methods = self.solver.getDefinitions('method')
             if(len(methods) == 0):
                 self.solver.reportError(self.name+' has no methods defined')
                 return
@@ -754,25 +838,27 @@ class Goal:
             # look for methods for which <pre> is already solved
             dependent = []
             for method in methods:
-                if self.method == None:                    
-                    code = self.evalConditions('pre',method)
-                    if code == True:
-                        self.method = method
-                        if self.solver.args.verbose:
-                            print 'SELECTED '+method.get('name')+' to achieve goal '+self.name
-                    elif code == False:
-                            print 'REJECTED '+method.get('name')+' to achieve goal '+self.name
-                    else:
-                        dependent.append(method)
-                        if self.solver.args.verbose:
-                            print 'QUEUED   '+method.get('name')+' to achieve goal '+self.name
+                if self.method == None:
+                    if method.get('targetGoalType') == self.name:
+                        code = self.evalConditions('pre',method)
+                        if code == True:
+                            self.method = method
+                            if self.solver.args.verbose > 0:
+                                print 'SELECTED '+method.get('name')+' to achieve goal '+self.name
+                        elif code == False:
+                            if self.solver.args.verbose > 0:
+                                print 'REJECTED '+method.get('name')+' to achieve goal '+self.name
+                        else:
+                            dependent.append(method)
+                            if self.solver.args.verbose > 0:
+                                print 'QUEUED   '+method.get('name')+' to achieve goal '+self.name
 
             for method in dependent:
                 if self.method == None:                    
                     code = self.solveConditions('pre',method)
                     if code == True:
                         self.method = method
-                    elif self.solver.args.verbose:
+                    elif self.solver.args.verbose > 0:
                         print 'UNSOLVABLE '+method.get('name')+' to achieve goal '+self.name
 
         if not canSkip and self.isSuccess():
@@ -784,7 +870,7 @@ class Goal:
                 self.execute(stmt)
             self.solver.endStatement(self.method)
 
-        if self.solver.args.verbose:
+        if self.solver.args.verbose > 0:
             if not self.isSuccess():
                 for error in self.errors:
                     print 'ERROR: '+error
@@ -809,19 +895,19 @@ class Goal:
 
             if count != None:
                 for index in range(0,int(count.getRvalue())):
-                    if self.solver.args.verbose:
+                    if self.solver.args.verbose > 0:
                         print 'BEGIN %s[%d]' % (stmt.get('name'),index)
                     for child in stmt:
                         if child.tag != 'count':
                             self.execute(child)
-                    if self.solver.args.verbose:
+                    if self.solver.args.verbose > 0:
                         print 'END %s[%d]' % (stmt.get('name'),index)
         elif stmt.tag == 'task':
-            if(self.solver.args.verbose):
+            if self.solver.args.verbose > 0:
                 print 'BEGIN Task %s' % stmt.get('name')
             for sub in stmt:
                 self.execute(sub)
-            if(self.solver.args.verbose):
+            if self.solver.args.verbose > 0:
                 print 'END   Task %s' % stmt.get('name')
         elif stmt.tag == 'shell':
             sys.stdout.flush()
@@ -830,15 +916,17 @@ class Goal:
             shellCommand = None
             for child in children:
                 if(child.tag == 'command'):
-                    shellCommand = self.solver.interpolateInner(self.context,child)
+                    shellCommand = self.solver.interpolateInner(self.context,child,self)
                 if(child.tag == 'send'):
                     cmd = ''
                     if(shellCommand != None):
                         cmd = shellCommand+' '
 
-                    cmd += self.solver.interpolateInner(self.context,child)
+                    cmd += self.solver.interpolateInner(self.context,child,self)
 
-                    if self.solver.args.pursue:
+                    if self.hasErrors():
+                        print "ERRORS %s" % cmd
+                    elif self.solver.args.pursue:
                         print "SYSTEM %s" % cmd
                         lastCommand = pexpect.run(cmd,withexitstatus=1)
                         if(lastCommand[1] != 0):
@@ -849,10 +937,12 @@ class Goal:
                     else:
                         print "PLAN  %s" % cmd
                 elif(child.tag == 'receive'):
-                    cmd = self.solver.interpolateInner(self.context,child)
+                    cmd = self.solver.interpolateInner(self.context,child,self)
 
                     print "EXPECT %s" % cmd
-                    if self.solver.args.pursue:
+                    if self.hasErrors():
+                        print "ERRORS %s" % cmd
+                    elif self.solver.args.pursue:
                         match = re.search(pattern)
                         if match:
                             self.useMatch(child,match)
@@ -866,7 +956,7 @@ class Goal:
             node = self.allocVariable(stmt.get('name'))
             self.setVariable(stmt.get('name'),file.name)
             self.tempFiles.append(file)
-            print >>file, self.solver.interpolateInner(self.context,stmt)
+            print >>file, self.solver.interpolateInner(self.context,stmt,self)
             file.flush()
 
         self.solver.endStatement(stmt)
@@ -905,6 +995,7 @@ class ConfigNode:
         self.parent = None
 
     def copyFrom(self,other):
+#        print 'DEBUG: BEGIN ConfigNode.copyFrom('+self.getPath('.')+' <= '+other.getPath('.')+')'
         for otherVal in other.values:
             self.values.append(otherVal)
         for otherElement in other.elements:
@@ -917,6 +1008,7 @@ class ConfigNode:
                 self.fields[key] = ConfigNode(self.rootConfig,key)
                 self.fields[key].setParent(self)
             self.fields[key].copyFrom(other.fields[key])
+ #       print 'DEBUG: END   ConfigNode.copyFrom('+self.getPath('.')+' <= '+other.getPath('.')+')'
 
     def details(self):
         result = ''
@@ -927,6 +1019,8 @@ class ConfigNode:
 
 
     def initState(self,solver,xml):
+        if solver.args.verbose > 0:
+            print "BEGIN initState(%s) at %s:%d" % (self.getPath('.'),xml._file_name,xml._start_line_number)
         if xml.tag == 'struct' or xml.tag == 'state' or xml.tag == 'goalCompleted':
 #            if self.getValue() == None:
 #                struct = dict()
@@ -949,6 +1043,8 @@ class ConfigNode:
                     print 'Unable to interpret this XML expression: '+result.errors[0]
                 else:
                     self.setValue(result.value)
+        if solver.args.verbose > 0:
+            print "END   initState(%s) at %s:%d" % (self.getPath('.'),xml._file_name,xml._start_line_number)
 
     def initPath(self,method,symbolPath,value):
         configNode = self.lookupTermList(True,symbolPath,None)
@@ -1014,7 +1110,8 @@ class ConfigNode:
 
     def lookupTermList(self,create,pathTerms,errHandler):
         result = None
-#        print 'DEBUG: BEGIN lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
+        if self.rootConfig.solver.args.verbose > 0:
+            print 'BEGIN lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         if(len(pathTerms) == 0):
             result = self
 #            print 'DEBUG: no more path terms'
@@ -1031,21 +1128,24 @@ class ConfigNode:
                     errHandler.createError('No field named '+pathTerms[0]+' in expression '+self.getPath('.')+' fields include '+(','.join(self.fields.keys())))
                     return None
                 else:
-#                    print 'DEBUG: END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
+                    if self.rootConfig.solver.args.verbose:
+                        print 'END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
                     return None
 
 #            print 'DEBUG: found field named '+pathTerms[0]
             result = self.fields[pathTerms[0]].lookupTermList(create,pathTerms[1:],errHandler)
-#        print 'DEBUG: END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
+        if self.rootConfig.solver.args.verbose > 0:
+            print 'END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         return result
 
 class Config:
-    def __init__(self,name,desc):
+    def __init__(self,name,desc,solver):
         self.root = ConfigNode(self,name)
         self.desc = desc
+        self.solver = solver
 
-    def setup(self,solver,xmlProto):
-        self.root.initState(solver,xmlProto)
+    def setup(self,name,xmlProto):
+        self.root.lookupTermList(True,[name],self.solver).initState(self.solver,xmlProto)
 
     def toString(self):
         return self.desc
@@ -1057,14 +1157,15 @@ class Config:
         self.root.copyFrom(other.root)
 
 class Invocation:
-    def __init__(self,command):
+    def __init__(self,solver,command):
+        self.solver = solver
         self.command = command
         self.series = []
         self.state = 'init'
 
     def default(self):
-        first = Config(self.command,'Default context for '+self.toString())
-        first.setup(self.command.xmlProto)
+        first = Config(self.command,'Default context for '+self.toString(),self.solver)
+        #first.setup() !!
         self.series.append(first)
 
     def top(self):

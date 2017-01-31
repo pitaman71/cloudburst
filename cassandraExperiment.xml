@@ -40,91 +40,91 @@
         <describe locale="en-US">Configure EC2 node to run the Datastax Enterprise Graph Example</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
+        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="startCassandraNode" symbol="goal">
         <describe locale="en-US">Start the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
+        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="stopCassandraNode" symbol="goal">
         <describe locale="en-US">Stop the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
+        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="retireCassandraNode" symbol="goal">
         <describe locale="en-US">Dismantle EC2 node configuration</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
+        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="installDSEGLoader" symbol="goal">
         <describe locale="en-US">Install (optional) DSEG Loader tool</describe>
         <variable name="workDir" type="localFilePath"/>
         <variable name="node" type="EC2Node"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><rvalue>goal.node.credentials.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.address</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.node.credentials.certificate.localFilePath</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.user</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.dseCreds.password</rvalue></defined></pre>
+        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
+        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <method name="setupCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="setupCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
-            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><get>host.uname</get><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <tempFile name="dataStaxYumRepo">
 [datastax]
 name = DataStax Repo for DataStax Enterprise
-baseurl=https://<rvalue>goal.dseCreds.user</rvalue>:<rvalue>goal.dseCreds.password</rvalue>@rpm.datastax.com/enterprise
+baseurl=https://<get>goal.dseCreds.user</get>:<get>goal.dseCreds.password</get>@rpm.datastax.com/enterprise
 enabled=1
 gpgcheck=0
             </tempFile>
             <shell>
                 <label>cpYumConfigForDatastax</label>
-                <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.dataStaxYumRepo</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue>:datastax.repo
+                <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get>:datastax.repo
                 </send>
             </shell>
             <shell>
                 <label>copyDSEReposFile</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                <send>sudo cp ~<rvalue>goal.node.credentials.user</rvalue>/datastax.repo /etc/yum.repos.d/</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
+                <send>sudo cp ~<get>goal.node.credentials.user</get>/datastax.repo /etc/yum.repos.d/</send>
             </shell>
             <shell>
                 <label>installJava1.8</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
                 <send>sudo yum -y install java-1.8.0</send>
                 <send>sudo yum -y remove java-1.7.0-openjdk</send>
             </shell>
             <shell>
                 <label>installDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
                 <send>sudo yum -y install dse-full</send>
             </shell>
             <shell>
                 <label>fix_cassandra_yaml</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
                 <send>sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
                 <send>sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
                 <send>sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
@@ -134,13 +134,13 @@ gpgcheck=0
     <method name="startCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
-            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><get>host.uname</get><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <shell>
                 <label>startDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
                 <send>sudo service dse start</send>
             </shell>
         </do>
@@ -148,13 +148,13 @@ gpgcheck=0
     <method name="stopCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="stopCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
-            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><get>host.uname</get><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <shell>
                 <label>stopDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
                 <send>sudo service dse stop</send>
             </shell>
         </do>
@@ -162,13 +162,13 @@ gpgcheck=0
     <method name="retireCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="retireCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <DISABLE-pre>
-            <op name="eq"><rvalue>host.uname</rvalue><string>Linux</string></op>
+            <op name="eq"><get>host.uname</get><string>Linux</string></op>
         </DISABLE-pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <shell>
                 <label>uninstallDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
                 <send>sudo yum -y remove dse-full</send>
             </shell>
         </do>
@@ -179,10 +179,10 @@ gpgcheck=0
         <do>
             <shell>
                 <label>installLoader</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <rvalue>goal.node.credentials.certificate.localFilePath</rvalue> <rvalue>goal.node.credentials.user</rvalue>@<rvalue>goal.node.credentials.address</rvalue></command>
-                <send>mkdir -p <rvalue>goal.workDir</rvalue></send>
-                <send>cd <rvalue>goal.workDir</rvalue></send>
-                <send>wget --user <rvalue>goal.dseCreds.user</rvalue> --password <rvalue>goal.dseCreds.password</rvalue> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
+                <send>mkdir -p <get>goal.workDir</get></send>
+                <send>cd <get>goal.workDir</get></send>
+                <send>wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
                 <send>tar xvfz dse-graph-loader.tar.gz</send>
                 <send>find . -type f</send>
             </shell>
@@ -203,9 +203,9 @@ gpgcheck=0
         </do>
     </method>
     <goalProto name="installToolViaHomebrew" symbol="goal">
-        <describe locale="en-US">Ensure that <rvalue>goal.toolName</rvalue> is installed via Mac OS X Homebrew</describe>
+        <describe locale="en-US">Ensure that <get>goal.toolName</get> is installed via Mac OS X Homebrew</describe>
         <variable name="toolName" type="programName"/>
-        <post><op name="isZero"><shell value="returnCode"><send>which <rvalue>goal.toolName</rvalue></send></shell></op></post>
+        <post><op name="isZero"><shell value="returnCode"><send>which <get>goal.toolName</get></send></shell></op></post>
     </goalProto>
     <method name="installToolViaHomebrew" targetGoalType="installToolViaHomebrew" symbol="goal">
         <pre><goalCompleted name="installHomebrew"/></pre>
@@ -261,19 +261,19 @@ gpgcheck=0
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
         <variable name="config" type="EC2ClusterConfiguration"/>
         <variable name="credentials" type="EC2Credentials"/>
-        <pre><defined><rvalue>goal.config</rvalue></defined></pre>
-        <pre><defined><rvalue>goal.credentials</rvalue></defined></pre>
+        <pre><defined><get>goal.config</get></defined></pre>
+        <pre><defined><get>goal.credentials</get></defined></pre>
     </goalProto>
     <method name="ProvisionEC2Cluster" symbol="goal" targetGoalType="ProvisionEC2Cluster">
         <pre><goalCompleted name="installEC2CLITools"/></pre>
         <pre><goalCompleted name="installAnyJava"/></pre>
         <do>
             <repeat name="instances">
-                <count><rvalue>goal.config.numNodes</rvalue></count>
+                <count><get>goal.config.numNodes</get></count>
                 <do>
                     <shell>
                         <label>allocate</label>
-                        <send>$EC2_HOME/bin/ec2-run-instances <rvalue>goal.config.image</rvalue> -t <rvalue>goal.config.nodeType</rvalue> --associate-public-ip-address true -O <rvalue>goal.credentials.accessKey</rvalue> -W <rvalue>goal.credentials.secretKey</rvalue></send>
+                        <send>$EC2_HOME/bin/ec2-run-instances <get>goal.config.image</get> -t <get>goal.config.nodeType</get> --associate-public-ip-address true -O <get>goal.credentials.accessKey</get> -W <get>goal.credentials.secretKey</get></send>
                     </shell>
                 </do>
             </repeat>
@@ -288,7 +288,7 @@ gpgcheck=0
         <referenceDoc><url>https://docs.datastax.com/en/latest-opscenter/opsc/install/opscInstallTar_t.html</url></referenceDoc>
         <do>
             <shell>
-                <send>wget --user <rvalue>goal.dseCreds.user</rvalue> --password <rvalue>goal.dseCreds.password</rvalue> -L http://downloads.datastax.com/enterprise/opscenter.tar.gz</send>
+                <send>wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> -L http://downloads.datastax.com/enterprise/opscenter.tar.gz</send>
                 <send>tar xvfz opscenter.tar.gz</send>
                 <send>opscenter-*/bin/opscenter</send>
             </shell>
