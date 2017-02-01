@@ -41,8 +41,11 @@ if(solverArgs.plan or solverArgs.pursue):
     solver.solve()
 #    solver.terminate()
 
-if solverArgs.verbose > 0:
-    print 'Done'
+if topGoal != None and not topGoal.isSuccess():
+    for error in topGoal.errors:
+        print 'ERROR: '+error
+elif solverArgs.verbose > 0:
+    print 'GOAL COMPLETED SUCCESSFULLY'
 
 sys.exit(0 if topGoal == None or not topGoal.hasErrors() else 1)
 

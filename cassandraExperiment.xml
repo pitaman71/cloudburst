@@ -30,49 +30,82 @@
                 </struct>
             </struct>
         </struct>
-        <struct name="alansDseCredentials" type="PasswordCredentials">
-            <describe locale="en-US">Alan's Datastax userid (free)</describe>
-            <variable name="user" type="username">alan.pita_98458</variable>
-            <variable name="password" type="password">LAn4Iv6S</variable>
+        <struct name="DSEDemoCluster" type="EC2Cluster">
+            <struct name="credentials" type="SSHCredentials">
+                <describe locale="en-US">SSH/TLS username and certificate</describe>
+                <variable name="user" type="username">ubuntu</variable>
+                <struct name="certificate" type="SSLCertificate">
+                    <variable name="localFilePath" type="localFilePath">~/.ssh/expero-us-east-2.pem</variable>
+                </struct>
+            </struct>
+            <struct name="TNode0" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-05af501073923f7ce</variable>
+                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.52.56</variable>
+            </struct>
+            <struct name="TNode1" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-068acbba609252604</variable>
+                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.100.138</variable>
+            </struct>
+            <struct name="TNode2" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-02aeeb57787d459dd</variable>
+                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.75.181</variable>
+            </struct>
+            <struct name="TNode3" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-00c68b14a1691f57e</variable>
+                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.99.7</variable>
+            </struct>
+            <struct name="SNode0" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-0959911e46c66a28a</variable>
+                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.81.63</variable>
+            </struct>
         </struct>
     </state>
     <goalProto name="setupCassandraNode" symbol="goal">
         <describe locale="en-US">Configure EC2 node to run the Datastax Enterprise Graph Example</describe>
         <variable name="node" type="EC2Node"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="startCassandraNode" symbol="goal">
         <describe locale="en-US">Start the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="stopCassandraNode" symbol="goal">
         <describe locale="en-US">Stop the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="retireCassandraNode" symbol="goal">
         <describe locale="en-US">Dismantle EC2 node configuration</describe>
         <variable name="node" type="EC2Node"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
@@ -80,10 +113,11 @@
         <describe locale="en-US">Install (optional) DSEG Loader tool</describe>
         <variable name="workDir" type="localFilePath"/>
         <variable name="node" type="EC2Node"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.node.credentials.user</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.address</get></defined></pre>
-        <pre><defined><get>goal.node.credentials.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
@@ -97,37 +131,42 @@
             <tempFile name="dataStaxYumRepo">
 [datastax]
 name = DataStax Repo for DataStax Enterprise
-baseurl=https://<get>goal.dseCreds.user</get>:<get>goal.dseCreds.password</get>@rpm.datastax.com/enterprise
+baseurl=https://<get>goal.dseCreds.user</get>:<python name="urllib.quote_plus"><get>goal.dseCreds.password</get></python>@rpm.datastax.com/enterprise
 enabled=1
 gpgcheck=0
             </tempFile>
             <shell>
                 <label>cpYumConfigForDatastax</label>
-                <send>scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get>:datastax.repo
+                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get>:datastax.repo
                 </send>
             </shell>
             <shell>
+                <label>installYum</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">sudo apt-get --assume-yes install yum*</send>
+            </shell>
+            <shell>
                 <label>copyDSEReposFile</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>sudo cp ~<get>goal.node.credentials.user</get>/datastax.repo /etc/yum.repos.d/</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">sudo cp ~<get>goal.ec2Creds.user</get>/datastax.repo /etc/yum/repos.d/</send>
             </shell>
             <shell>
                 <label>installJava1.8</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>sudo yum -y install java-1.8.0</send>
-                <send>sudo yum -y remove java-1.7.0-openjdk</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">sudo yum -y install java-1.8.0</send>
+                <send name="command" onFail="stop">sudo yum -y remove java-1.7.0-openjdk</send>
             </shell>
             <shell>
                 <label>installDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>sudo yum -y install dse-full</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">sudo yum -y install dse-full</send>
             </shell>
             <shell>
                 <label>fix_cassandra_yaml</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
-                <send>sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
-                <send>sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
+                <send name="command" onFail="stop">sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
+                <send name="command" onFail="stop">sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
             </shell>
         </do>
     </method>
@@ -140,9 +179,10 @@ gpgcheck=0
         <do>
             <shell>
                 <label>startDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>sudo service dse start</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="ignore">sudo service dse start</send>
             </shell>
+            <op name="isZero"><get>goal.command.rc</get></op>
         </do>
     </method>
     <method name="stopCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="stopCassandraNode" goalSymbol="goal">
@@ -154,8 +194,8 @@ gpgcheck=0
         <do>
             <shell>
                 <label>stopDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>sudo service dse stop</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">sudo service dse stop</send>
             </shell>
         </do>
     </method>
@@ -168,8 +208,8 @@ gpgcheck=0
         <do>
             <shell>
                 <label>uninstallDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>sudo yum -y remove dse-full</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">sudo yum -y remove dse-full</send>
             </shell>
         </do>
     </method>
@@ -179,18 +219,18 @@ gpgcheck=0
         <do>
             <shell>
                 <label>installLoader</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.node.credentials.certificate.localFilePath</get> <get>goal.node.credentials.user</get>@<get>goal.node.credentials.address</get></command>
-                <send>mkdir -p <get>goal.workDir</get></send>
-                <send>cd <get>goal.workDir</get></send>
-                <send>wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
-                <send>tar xvfz dse-graph-loader.tar.gz</send>
-                <send>find . -type f</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command" onFail="stop">mkdir -p <get>goal.workDir</get></send>
+                <send name="command" onFail="stop">cd <get>goal.workDir</get></send>
+                <send name="command" onFail="stop">wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
+                <send name="command" onFail="stop">tar xvfz dse-graph-loader.tar.gz</send>
+                <send name="command" onFail="stop">find . -type f</send>
             </shell>
         </do>
     </method>
     <goalProto name="installHomebrew" symbol="goal">
         <describe locale="en-US">Ensure that Homebrew is installed on host</describe>
-        <post><op name="isZero"><shell value="returnCode"><send>which brew</send></shell></op></post>
+        <post><op name="isZero"><shell value="returnCode"><send name="command" onFail="stop">which brew</send></shell></op></post>
     </goalProto>
     <method name="installHomebrew" targetGoalType="installHomebrew" symbol="goal">
         <describe locale="en-US">using ruby command</describe>
@@ -198,14 +238,14 @@ gpgcheck=0
         <do>
             <shell>
                 <label>install</label>
-                <send>/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"</send>
+                <send name="command" onFail="stop">/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"</send>
             </shell>
         </do>
     </method>
     <goalProto name="installToolViaHomebrew" symbol="goal">
         <describe locale="en-US">Ensure that <get>goal.toolName</get> is installed via Mac OS X Homebrew</describe>
         <variable name="toolName" type="programName"/>
-        <post><op name="isZero"><shell value="returnCode"><send>which <get>goal.toolName</get></send></shell></op></post>
+        <post><op name="isZero"><shell value="returnCode"><send name="command" onFail="stop">which <get>goal.toolName</get></send></shell></op></post>
     </goalProto>
     <method name="installToolViaHomebrew" targetGoalType="installToolViaHomebrew" symbol="goal">
         <pre><goalCompleted name="installHomebrew"/></pre>
@@ -214,7 +254,7 @@ gpgcheck=0
         <do>
             <shell>
                 <label>install</label>
-                <send>brew install wget</send>
+                <send name="command" onFail="stop">brew install wget</send>
             </shell>
         </do>
     </method>
@@ -227,12 +267,12 @@ gpgcheck=0
         <do>
             <shell>
                 <label>fetchZipfile</label>
-                <send>wget http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send>
+                <send name="command" onFail="stop">wget http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send>
             </shell>
             <shell>
                 <label>unzipAndInstall</label>
-                <send>mkdir -p ec2</send>
-                <send>unzip ec2-api-tools.zip -d ec2</send>
+                <send name="command" onFail="stop">mkdir -p ec2</send>
+                <send name="command" onFail="stop">unzip ec2-api-tools.zip -d ec2</send>
             </shell>
         </do>
     </method>
@@ -241,21 +281,21 @@ gpgcheck=0
         <do>
             <shell>
                 <label>fetchZipfile</label>
-                <send>curl -O http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send>
+                <send name="command" onFail="stop">curl -O http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip</send>
             </shell>
             <shell>
                 <label>unzipAndInstall</label>
-                <send>mkdir -p ec2</send>
-                <send>unzip ec2-api-tools.zip -d ec2</send>
+                <send name="command" onFail="stop">mkdir -p ec2</send>
+                <send name="command" onFail="stop">unzip ec2-api-tools.zip -d ec2</send>
             </shell>
         </do>
     </method>
     <goalProto name="installAnyJava" symbol="goal">
         <describe locale="en-US">Ensure host has JDK installed</describe>
-        <pre><op name="isZero"><shell value="returnCode"><send>which java</send></shell></op></pre>
+        <pre><op name="isZero"><shell value="returnCode"><send name="command" onFail="stop">which java</send></shell></op></pre>
     </goalProto>
     <method name="installJavaByProbe" symbol="goal" targetGoalType="installAnyJava">
-        <do><shell><send>java -version</send></shell></do>
+        <do><shell><send name="command" onFail="stop">java -version</send></shell></do>
     </method>
     <goalProto name="ProvisionEC2Cluster" symbol="goal">
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
@@ -273,7 +313,7 @@ gpgcheck=0
                 <do>
                     <shell>
                         <label>allocate</label>
-                        <send>$EC2_HOME/bin/ec2-run-instances <get>goal.config.image</get> -t <get>goal.config.nodeType</get> --associate-public-ip-address true -O <get>goal.credentials.accessKey</get> -W <get>goal.credentials.secretKey</get></send>
+                        <send name="command" onFail="stop">$EC2_HOME/bin/ec2-run-instances <get>goal.config.image</get> -t <get>goal.config.nodeType</get> --associate-public-ip-address true -O <get>goal.credentials.accessKey</get> -W <get>goal.credentials.secretKey</get></send>
                     </shell>
                 </do>
             </repeat>
@@ -288,9 +328,9 @@ gpgcheck=0
         <referenceDoc><url>https://docs.datastax.com/en/latest-opscenter/opsc/install/opscInstallTar_t.html</url></referenceDoc>
         <do>
             <shell>
-                <send>wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> -L http://downloads.datastax.com/enterprise/opscenter.tar.gz</send>
-                <send>tar xvfz opscenter.tar.gz</send>
-                <send>opscenter-*/bin/opscenter</send>
+                <send name="command" onFail="stop">wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> -L http://downloads.datastax.com/enterprise/opscenter.tar.gz</send>
+                <send name="command" onFail="stop">tar xvfz opscenter.tar.gz</send>
+                <send name="command" onFail="stop">opscenter-*/bin/opscenter</send>
             </shell>
         </do>
     </method>

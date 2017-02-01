@@ -3,6 +3,23 @@ import os
 import socket
 import tempfile
 import glob
+import urllib
+from subprocess import PIPE, Popen
+from threading  import Thread
+
+try:
+    from Queue import Queue, Empty
+except ImportError:
+    from queue import Queue, Empty  # python 3.x
+
+# BEGIN code from http://stackoverflow.com/questions/375427/non-blocking-read-on-a-subprocess-pipe-in-python
+ON_POSIX = 'posix' in sys.builtin_module_names
+
+def enqueue_output(out, queue):
+    for line in iter(out.readline, b''):
+        queue.put(line)
+    out.close()
+# END code from http://stackoverflow.com/questions/375427/non-blocking-read-on-a-subprocess-pipe-in-python
 
 sys.path.append('/usr/local/lib/python2.7/site-packages')
 
@@ -234,6 +251,7 @@ class Solver:
         goal.cfgTopGoal(goalName)
         if not self.hasGoal(goal):            
             self.addGoal(goal)
+        return goal
 
     def addGoal(self,goal):
         self.goals.append(goal)
@@ -431,11 +449,11 @@ class Evaluator:
     def doUnaryOperator(self,op,a):
         self.outcome = a.outcome
         if(op == 'isZero'):
-            self.value = a.value == 0
-        elif(op == 'isNoZero'):
-            self.value = a.value != 0
+            self.value = a.getRvalue() == 0
+        elif(op == 'isNotZero'):
+            self.value = a.getRvalue() != 0
         elif(op == 'not'):
-            self.value = not a.value
+            self.value = not a.getRvalue()
         else:
             self.createError('Unrecognized operator: '+op)
 
@@ -445,17 +463,17 @@ class Evaluator:
     def doBinaryOperator(self,op,a,b):
         self.outomde = a.outcome and b.outcome
         if(op == 'eq'):
-            self.value = a.value == b.value
+            self.value = a.getRvalue() == b.getRvalue()
         elif(op == 'ne'):
-            self.value = a.value != b.value
+            self.value = a.getRvalue() != b.getRvalue()
         elif(op == 'gt'):
-            self.value = a.value > b.value
+            self.value = a.getRvalue() > b.getRvalue()
         elif(op == 'lt'):
-            self.value = a.value < b.value
+            self.value = a.getRvalue() < b.getRvalue()
         elif(op == 'ge'):
-            self.value = a.value >= b.value
+            self.value = a.getRvalue() >= b.getRvalue()
         elif(op == 'le'):
-            self.value = a.value <= b.value
+            self.value = a.getRvalue() <= b.getRvalue()
         else:
             self.createError('Unrecognized operator: '+op)
 
@@ -581,6 +599,13 @@ class Evaluator:
                 if testType == 'exists':
                     interpreted = True
                     self.value = os.path.exists(childResults[0].value)
+        elif self.expr.tag == 'python':
+            funcName = self.expr.get('name')
+            if len(childResults) != 1:
+                self.createError('python tag must always have a path as its only child')
+            else:
+                exec('self.value = %s(\'%s\')' % (funcName,str(childResults[0].getRvalue())))
+                interpreted = True
         elif self.expr.tag == 'goalCompleted':
             goalName = self.expr.get('name')
             goalConfig = Config(goalName,'Example of completed goal',self.solver)
@@ -879,12 +904,23 @@ class Goal:
             self.solver.endStatement(self.proto)
 
     def execute(self,stmt):
+        self.execute_r(self.context.root.lookupTermList(True,['goal'],self),stmt)
+
+    def execute_r(self,contextPre,stmt):
         self.solver.beginStatement(stmt)
+        context = contextPre
+        if 'name' in stmt.attrib:
+            context = context.lookupTermList(True,[stmt.get('name')],self)
+            if self.solver.args.verbose > 0:
+                print 'ENTER CONTEXT '+context.getPath('.')
         if stmt.tag == 'pre':
             self.checkExpr(stmt)
+        elif stmt.tag == 'label':
+            context = context.lookupTermList(True,[stmt.get('name')],self)            
         elif stmt.tag == 'do':
             for child in stmt:
-                self.execute(child)
+                if self.isSuccess():
+                    self.execute_r(context,child)
         elif stmt.tag == 'repeat':
             count = None
             for child in stmt:
@@ -899,14 +935,16 @@ class Goal:
                         print 'BEGIN %s[%d]' % (stmt.get('name'),index)
                     for child in stmt:
                         if child.tag != 'count':
-                            self.execute(child)
+                            if self.isSuccess():
+                                self.execute_r(context,child) # !! wrong, should have subcontext with index defined
                     if self.solver.args.verbose > 0:
                         print 'END %s[%d]' % (stmt.get('name'),index)
         elif stmt.tag == 'task':
             if self.solver.args.verbose > 0:
                 print 'BEGIN Task %s' % stmt.get('name')
             for sub in stmt:
-                self.execute(sub)
+                if self.isSuccess():
+                    self.execute_r(context,sub)
             if self.solver.args.verbose > 0:
                 print 'END   Task %s' % stmt.get('name')
         elif stmt.tag == 'shell':
@@ -929,11 +967,18 @@ class Goal:
                     elif self.solver.args.pursue:
                         print "SYSTEM %s" % cmd
                         lastCommand = pexpect.run(cmd,withexitstatus=1)
-                        if(lastCommand[1] != 0):
-                            print "ERROR: shell send failed"
+                        if self.solver.args.verbose > 0:
                             print lastCommand[0]
-                            exit(1)
-                        print lastCommand[0]
+                        if 'name' in child.attrib:
+                            stdoutVar = context.lookupTermList(True,[child.get('name'),'stdout'],self)
+                            rcVar = context.lookupTermList(True,[child.get('name'),'rc'],self)
+                            stdoutVar.setValue(lastCommand[0])
+                            rcVar.setValue(lastCommand[1])
+                        if 'onFail' not in child.attrib or child.get('onFail') == 'stop':
+                            self.createErrorAt(child,'COMMAND RC=%d : %s'+lastCommand[1],cmd)
+                            lines = '\n'.split(lastCommand[0])
+                            for line in lines:
+                                self.createErrorAt(child,line)
                     else:
                         print "PLAN  %s" % cmd
                 elif(child.tag == 'receive'):
@@ -958,7 +1003,23 @@ class Goal:
             self.tempFiles.append(file)
             print >>file, self.solver.interpolateInner(self.context,stmt,self)
             file.flush()
+        elif stmt.tag == 'op' or stmt.tag == 'get':
+            evaluator = Evaluator(self.solver,self.context)
+            evaluator.setXML(stmt)
+            evaluator.evaluate()
+            if not evaluator.isSuccess():
+                self.createErrorAt(stmt,'Expected hive statement or expression')
+                for error in evaluator.errors:
+                    self.createErrorAt(stmt,error)
+            elif bool(evaluator.getRvalue()) != True:
+                self.createErrorAt(stmt,'Statement failed to execute or expression returned zero/False')                
+        else:
+            if self.solver.args.verbose > 0:
+                print 'SKIP tag %s which is neither a statement nor an expression' % stmt.tag
 
+        if 'name' in stmt.attrib:
+            if self.solver.args.verbose > 0:
+                print 'RETURN CONTEXT '+contextPre.getPath('.')
         self.solver.endStatement(stmt)
 
 class Task:
@@ -1053,9 +1114,12 @@ class ConfigNode:
 
     def setValue(self,value):
         if isinstance(value,ConfigNode):
-#            print 'DEBUG: copy '+value.getPath('.')+' to '+self.getPath('.')
+            if self.rootConfig.solver.args.verbose > 0:
+                print 'ConfigNode.setValue copies '+value.getPath('.')+' to '+self.getPath('.')
             self.copyFrom(value)
         else:
+            if self.rootConfig.solver.args.verbose > 0:
+                print 'ConfigNode.setValue assigns '+self.getPath('.')+' to '+str(value)
             self.selected = value
 
     def getValue(self):
