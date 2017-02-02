@@ -22,10 +22,11 @@ for programFile in solverArgs.program:
     solver.readFile(programFile)
 
 if(solverArgs.list):
+    tabulator = hive.Tabulator()
     goalProtos = solver.getDefinitions('goalProto')
     for goalProto in goalProtos:
-        print 'goalProto: '+goalProto.get('name')
-
+        tabulator.addElement(goalProto)
+    print tabulator.printText()
 
 topGoal = None
 if(solverArgs.plan or solverArgs.pursue):
@@ -37,9 +38,11 @@ if(solverArgs.plan or solverArgs.pursue):
 
 
     solver.initialize()
-    topGoal = solver.addTopGoalByName(goalName)
-    solver.solve()
+    agent = solver.beginAgent()
+    topGoal = agent.addTopGoalByName(goalName)    
+    agent.solve()
 #    solver.terminate()
+    solver.endAgent(agent)
 
 if topGoal != None and not topGoal.isSuccess():
     for error in topGoal.errors:

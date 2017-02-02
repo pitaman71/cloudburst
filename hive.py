@@ -1,5 +1,6 @@
 import sys
 import os
+import uuid
 import socket
 import tempfile
 import glob
@@ -172,6 +173,48 @@ class ElementTreeReader:
 #        else
 #            self.set(attrib,thing)
 
+class Tabulator:
+    def __init__(self):
+        self.rows = []
+
+    def addElement(self,xml):
+        if xml.tag == 'goalProto':
+            row = dict(type=xml.tag,name=xml.get('name'))
+            descriptions = xml.findall('describe')
+            row['description'] = ''
+            for description in descriptions:
+                row['description'] = description.text            
+            self.rows.append(row)
+
+    def printText(self):
+        sizes = dict()
+        for row in self.rows:
+            for key,value in row.iteritems():
+                maxSize = len(key)
+                if len(value) > maxSize:
+                    maxSize = len(value)
+
+                if key not in sizes:
+                    sizes[key] = maxSize
+                elif maxSize > sizes[key]:
+                    sizes[key] = maxSize
+
+        formatString = '|'
+        for key in sizes.keys():
+            formatString += ' %%(%s)%ds |' % (key,sizes[key])
+        formatString += '\n'
+
+        headerString = '|'
+        for key in sizes.keys():
+            headerString += (' %%%ds |' % sizes[key]) % key
+        headerString += '\n'
+
+        resultString = headerString
+        for row in self.rows:
+            resultString += formatString % row
+
+        return resultString
+
 class Solver:
     def __init__(self,solverArgs,remainingArgString):
         self.goals = []
@@ -183,6 +226,13 @@ class Solver:
         self.remainingArgString = remainingArgString
         self.statementStack = []
         self.stateDefs = []
+        self.agents = []
+
+    def allocateAgentName(self):
+        return str(uuid.uuid4())
+
+    def verboseMode(self,level):
+        return self.args.verbose != None and self.args.verbose >= level        
 
     def readFile(self,programFile,mandatory=True):
         actualPaths = glob.glob(os.path.expanduser(programFile))
@@ -242,24 +292,6 @@ class Solver:
                 return defn
         return None
 
-    def hasGoal(self,goal):
-        goals = [x for x in self.goals if goal.subsumedBy(x)]
-        return len(goals)>0
-
-    def addTopGoalByName(self,goalName):
-        goal = Goal(self)
-        goal.cfgTopGoal(goalName)
-        if not self.hasGoal(goal):            
-            self.addGoal(goal)
-        return goal
-
-    def addGoal(self,goal):
-        self.goals.append(goal)
-
-    def solve(self):
-        for goal in self.goals:
-            goal.pursue()
-
     def reportError(self,errMsg):
         print 'ERROR: '+errMsg
         self.result = False
@@ -270,29 +302,57 @@ class Solver:
     def initialize(self):
         for stateNode in self.getStateDefs():
             position = '%s:%d' % (stateNode._file_name,stateNode._start_line_number)
-            if self.args.verbose > 0:
+            if self.verboseMode(1):
                 print 'BEGIN Processing <state> element at '+position
             self.state.root.initState(self,stateNode)
-            if self.args.verbose > 0:
+            if self.verboseMode(1) :
                 print 'END   Processing <state> element at '+position
 
 #    def terminate(self):
         # nothing to do        
 
+    def beginAgent(self):
+        agent = Agent(self);
+        self.agents.append(agent)
+        return agent
+
+    def endAgent(self,agent):
+        self.agents.remove(agent)
+
+class Agent:
+    def __init__(self,solver):
+        self.solver = solver
+        self.goals = []
+        self.goalsByName = dict()
+        self.statementStack = []
+        self.name = solver.allocateAgentName()
+        self.state = Config(self.name,'State of Agent '+self.name,solver)
+        self.goalIndex = dict()
+
+    def allocateGoalName(self,prefix):
+        if prefix not in self.goalIndex:
+            self.goalIndex[prefix] = 0
+        else:
+            self.goalIndex[prefix] += 1
+        return '%s.%s.%d' % (self.name,prefix,self.goalIndex[prefix])
+
     def defaultEvalContext(self,goalName,desc):
-        result = Config(goalName,desc,self)
-        result.copyFrom(self.state)
+        result = Config(goalName,desc,self.solver)
+        result.copyFrom(self.solver.state)
 
-        result.root.initPath('Solver.defaultEvalContext',['host','platform'],sys.platform)
-        result.root.initPath('Solver.defaultEvalContext',['host','uname'],os.uname())
-        result.root.initPath('Solver.defaultEvalContext',['host','hostname'],socket.gethostname())
-        result.root.initPath('Solver.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
+        result.initPath('Solver.defaultEvalContext',['host','platform'],sys.platform)
+        result.initPath('Solver.defaultEvalContext',['host','uname'],os.uname())
+        result.initPath('Solver.defaultEvalContext',['host','hostname'],socket.gethostname())
+        result.initPath('Solver.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
 
-        if self.args.verbose > 0:
+        if self.verboseMode(1):
             print 'BEGIN defaultEvalContext '+goalName
             print result.details()
             print 'END   defaultEvalContext '+goalName
         return result
+
+    def verboseMode(self,level):
+        return self.solver.args.verbose != None and self.solver.args.verbose >= level
 
     def interpolateInner(self,context,elt,errHandler):
         cmd = ''
@@ -317,24 +377,30 @@ class Solver:
 #            cmd += elt.tail
         return cmd
 
-    def beginStatement(self,statement):
+    def beginStatement(self,statement,context):
         self.statementStack.append(statement)
-        if self.args.narrate:
+        if self.solver.args.narrate:
             descriptions = statement.findall('describe')
             if len(descriptions) > 0:
-                evalResult = Evaluator(self,self.state)
+                evalResult = Evaluator(self,context)
                 evalResult.setXML(descriptions[0])
                 evalResult.evaluate()
-                print "BEGIN # "+evalResult.value
+                name = ''
+                if 'name' in statement.attrib:
+                    name = '%s : ' % statement.get('name')
+                print "BEGIN # %s%s" % (name,evalResult.value)
 
-    def endStatement(self,statement):
-        if self.args.narrate:
+    def endStatement(self,statement,context):
+        if self.solver.args.narrate:
             descriptions = statement.findall('describe')
             if len(descriptions) > 0:
-                evalResult = Evaluator(self,self.state)
+                evalResult = Evaluator(self,context)
                 evalResult.setXML(descriptions[0])
                 evalResult.evaluate()
-                print "END   # "+evalResult.value
+                name = ''
+                if 'name' in statement.attrib:
+                    name = '%s : ' % statement.get('name')
+                print "END   # %s%s" % (name,evalResult.value)
         self.statementStack.pop()
 
     def findGoal(self,goalName,goalConfig):
@@ -343,6 +409,24 @@ class Solver:
                 if goal.context.covers(goalConfig):
                     return goal
         return None
+
+    def hasGoal(self,goal):
+        goals = [x for x in self.goals if goal.subsumedBy(x)]
+        return len(goals)>0
+
+    def addTopGoalByName(self,goalName):
+        goal = Goal(self)
+        goal.cfgTopGoal(goalName,self.solver.remainingArgString)
+        if not self.hasGoal(goal):            
+            self.addGoal(goal)
+        return goal
+
+    def addGoal(self,goal):
+        self.goals.append(goal)
+
+    def solve(self):
+        for goal in self.goals:
+            goal.pursue()
 
     def saveGoal(self,goal):
         if goal.name not in self.goalsByName:
@@ -400,8 +484,8 @@ class EvalOutcomes:
             return EvalOutcomes().setFalse()
 
 class Evaluator:
-    def __init__(self,solver,context):
-        self.solver = solver
+    def __init__(self,agent,context):
+        self.agent = agent
         self.context=context
         self.errors = []
         self.outcome = EvalOutcomes().setTrue()
@@ -480,7 +564,7 @@ class Evaluator:
     def doStruct(self,xml):
         self.value = dict()
         for child in xml:
-            subResult = Evaluator(self.solver,self.context)
+            subResult = Evaluator(self.agent,self.context)
             subResult.setXML(child)
             if 'name' not in subResult:
                 subResult.createError('XML child of structure must have attribute \'name\'')
@@ -496,7 +580,7 @@ class Evaluator:
 
     def doDefined(self,a):
         self.value = a.isSuccess()
-        if self.solver.args.verbose and not a.isSuccess():
+        if self.agent.verboseMode(1) and not a.isSuccess():
             for error in a.errors:                
                 print error
 
@@ -510,18 +594,18 @@ class Evaluator:
 
     def doXML(self):
         childResults = []
-        for child in self.expr:
-            sub = Evaluator(self.solver,self.context)
-            sub.setXML(child)
-            sub.evaluate()
-            childResults.append(sub)
-        if len(childResults) == 0 and self.expr.text:
-            sub = Evaluator(self.solver,self.context)
+        if self.expr.text:
+            sub = Evaluator(self.agent,self.context)
             sub.setString(self.expr.text)
             sub.doText()
             childResults.append(sub)
+        for child in self.expr:
+            sub = Evaluator(self.agent,self.context)
+            sub.setXML(child)
+            sub.evaluate()
+            childResults.append(sub)
 
-        if self.solver.args.verbose > 0:
+        if self.agent.verboseMode(1):
             print 'BEGIN evaluating expression '+self.expr.tag+' at '+self.label
 
         interpreted = False
@@ -550,13 +634,31 @@ class Evaluator:
                 self.outcome = self.outcome and EvalOutcomes().setFalse()
             else:
                 interpreted = True
+        elif self.expr.tag == 'int':
+            if(len(childResults) == 0):
+                self.createError('<'+self.expr.tag+'> must always have a child expression')
+            else:
+                interpreted = True
+                self.setValue(int(childResults[0].getRvalue()))
+                self.outcome = self.outcome and childResults[0].outcome
+        elif self.expr.tag == 'bool':
+            if(len(childResults) == 0):
+                self.createError('<'+self.expr.tag+'> must always have a child expression')
+            else:
+                interpreted = True
+                rvalue = childResults[0].getRvalue()
+                self.setValue(rvalue != False and rvalue != 0 and rvalue != 'false' and rvalue != 'False' and rvalue != 'FALSE')
+                self.outcome = self.outcome and childResults[0].outcome
         elif self.expr.tag == 'string' or self.expr.tag == 'describe':
             if(len(childResults) == 0):
                 self.createError('<'+self.expr.tag+'> must always have a child expression')
             else:
                 interpreted = True
-                self.setValue(childResults[0].value)
-                self.outcome = self.outcome and childResults[0].outcome
+                text = ''
+                for child in childResults:
+                    text += str(child.getRvalue())
+                    self.outcome = self.outcome and child.outcome
+                self.setValue(text)
 #        elif self.expr.tag == 'struct':
 #            interpreted = True
 #            self.doDict(self.expr)
@@ -581,9 +683,9 @@ class Evaluator:
             for child in children:
                 if(child.tag == 'send'):
                     cmd = ''
-                    cmd += self.solver.interpolateInner(self.context,child,self)
+                    cmd += self.agent.interpolateInner(self.context,child,self)
                     lastReturnCode = pexpect.run(cmd,withexitstatus=1)
-                    if self.solver.args.verbose > 0:
+                    if self.agent.verboseMode(1):
                         print "SHELL RC "+str(lastReturnCode[1])+" FROM "+cmd
             valueType = self.expr.get('value')
             if(valueType == 'returnCode'):
@@ -594,7 +696,7 @@ class Evaluator:
             if len(childResults) != 1:
                 self.createError('fileTest tag must always have a path as its only child')
             else:
-                if self.solver.args.verbose > 0:
+                if self.agent.verboseMode(1):
                     print "TESTING FILE "+childResults[0].value
                 if testType == 'exists':
                     interpreted = True
@@ -608,9 +710,9 @@ class Evaluator:
                 interpreted = True
         elif self.expr.tag == 'goalCompleted':
             goalName = self.expr.get('name')
-            goalConfig = Config(goalName,'Example of completed goal',self.solver)
+            goalConfig = Config(goalName,'Example of completed goal',self.agent.solver)
             goalConfig.setup('goal',self.expr)
-            foundGoal = self.solver.findGoal(goalName,goalConfig)
+            foundGoal = self.agent.findGoal(goalName,goalConfig)
             interpreted = True
             if (foundGoal != None):
                 self.value = True
@@ -622,7 +724,7 @@ class Evaluator:
         if not interpreted and len(self.errors) == 0:
             self.createError('Cannot interpret this expression')
 
-        if self.solver.args.verbose > 0:
+        if self.agent.verboseMode(1):
             print 'END   evaluating expression '+self.expr.tag+' at '+self.label+' with result: '+(jsonpickle.encode(self.getRvalue()) if self.isSuccess() else self.getOutcome().tostring())
 
 
@@ -637,28 +739,29 @@ class Evaluator:
             self.value = self.text
 
 class Goal:
-    def __init__(self,solver):
-        self.name = ''
+    def __init__(self,agent):
         self.proto = None
         self.method = None
         self.variables = []
         self.errors = []
         self.tempFiles = []
-        self.solver = solver
+        self.agent = agent
         self.parent = None
 
-    def cfgTopGoal(self,name):
-        self.name = name
-        self.context = self.solver.defaultEvalContext(name,'Evaluation context for goal '+self.name)
-        self.args = self.solver.remainingArgString
+    def cfgTopGoal(self,name,remainingArgString):
+        self.protoName = name
+        self.name = self.agent.allocateGoalName(name)
+        self.context = self.agent.defaultEvalContext(name,'Evaluation context for goal '+self.name)
+        self.args = remainingArgString
 
-    def cfgSubGoal(self,name,parent,argContext):
-        self.name = name
+    def cfgSubGoal(self,name,parent,argContext,remainingArgString):
+        self.protoName = name
+        self.name = self.agent.allocateGoalName(name)
         self.parent = parent
-        self.context = self.solver.defaultEvalContext(name,'Evaluation context for subgoal '+self.name)
+        self.context = self.agent.defaultEvalContext(name,'Evaluation context for subgoal '+self.name)
         goalNode = self.context.root.lookupTermList(True,['goal'],None)
         goalNode.copyFrom(argContext.root)
-        self.args = self.solver.remainingArgString
+        self.args = remainingArgString
 
     def setProto(self,xmlProto):
         self.proto = xmlProto
@@ -666,8 +769,9 @@ class Goal:
         # allocate state for <variable> tags under <goalProto>
         self.variables = xmlProto.findall('variable')
         for variable in self.variables:                
-            lhs = self.context.root.lookupTermList(True,[self.proto.get('symbol'),variable.get('name')],Evaluator(self.solver,self.context).setXML(variable))
-            rhs = Evaluator(self.solver,self.context)
+            lhs = self.context.root.lookupTermList(True,[self.proto.get('symbol'),variable.get('name')],Evaluator(self.agent,self.context).setXML(variable))
+            lhs.typeName = variable.get('type')
+            rhs = Evaluator(self.agent,self.context)
             rhs.setXML(variable)
             rhs.evaluate()
             if lhs != None and rhs != None and rhs.isSuccess():
@@ -683,8 +787,8 @@ class Goal:
                 self.createError('Expected goal assignments but instead found command line argument: '+assignment)
             else:
 #                print 'DEBUG: parsed command-line assignment of '+tokens[0]+' := '+tokens[1]
-                lhs = self.context.root.lookupTermList(False,tokens[0].split('.'),Evaluator(self.solver,self.context).setString(tokens[1]))
-                rhs = Evaluator(self.solver,self.context)
+                lhs = self.context.root.lookupTermList(False,tokens[0].split('.'),Evaluator(self.agent,self.context).setString(tokens[1]))
+                rhs = Evaluator(self.agent,self.context)
                 rhs.setString(tokens[1])
                 rhs.evaluate()
                 if lhs == None:
@@ -738,6 +842,10 @@ class Goal:
 #            if args.verbose:
 #                print "Checking "+jsonpickle.encode(preCheck)
             self.checkExpr(preCheck)
+        if not self.isSuccess():
+            self.context.reconfigure(self.agent.solver.state,'goal')
+            controller = ConfigController(self.context)
+            self.addError(controller.printText())
 
     def checkPost(self):
         preChecks = self.proto.findall('pre')
@@ -755,10 +863,13 @@ class Goal:
         return result
 
     def evalCondition(self,condElement):
-        evalResult = Evaluator(self.solver,self.context)
+        evalResult = Evaluator(self.agent,self.context)
         evalResult.setXML(condElement)
         evalResult.evaluate()
-        return evalResult.getOutcome()
+        if(evalResult.getOutcome().isTrue()):
+            return EvalOutcomes().setTrue() if bool(evalResult.getRvalue()) else EvalOutcomes().setFalse()
+        else:
+            return evalResult.getOutcome()
 
     def solveConditions(self,condTag,xml):
         conditions = xml.findall(condTag)
@@ -766,19 +877,19 @@ class Goal:
         for condition in conditions:
             code = self.evalCondition(condition[0])
             if result and code.isPossible():
-                if self.solver.args.verbose:
+                if self.agent.verboseMode(1):
                     print 'PRECONDITION REQUIRES '+condition[0].tag+' '+str(condition._start_line_number)
                 subgoals = condition[0].findall('goalCompleted')
                 if condition[0].tag == 'goalCompleted':
                     subgoals.append(condition[0])
                 for xml in subgoals:
-                    if self.solver.args.verbose:
+                    if self.agent.verboseMode(1):
                         print 'PRECONDITION REQUIRES SUBGOALS '+str(condition._start_line_number)
                     goalName = xml.get('name')
-                    goalConfig = Config(goalName,'Subgoal configuration',self.solver)
+                    goalConfig = Config(goalName,'Subgoal configuration',self.agent.solver)
                     goalConfig.setup('goal',xml)
-                    subgoal = Goal(self.solver)
-                    subgoal.cfgSubGoal(goalName,self,goalConfig)
+                    subgoal = Goal(self.agent)
+                    subgoal.cfgSubGoal(goalName,self,goalConfig,self.agent.solver.remainingArgString)
                     subgoal.pursue()
                     if not subgoal.isSuccess():
                         result = False
@@ -786,11 +897,11 @@ class Goal:
         return result
 
     def checkExpr(self,preCheck):
-        checkResult = Evaluator(self.solver,self.context)
+        checkResult = Evaluator(self.agent,self.context)
         checkResult.setXML(preCheck[0])
         checkResult.evaluate()
         if not checkResult.isSuccess():
-            if(self.solver.args.verbose):
+            if self.agent.verboseMode(1):
                 print "ERROR: While checking <%s>," % preCheck.tag
                 for error in checkResult.errors:
                     print "       "+error                        
@@ -799,7 +910,7 @@ class Goal:
             self.createErrorAt(preCheck,'Pre check failed '+ElementTree.tostring(preCheck))
 
     def subsumedBy(self, other):
-        if(self.name != other.name):
+        if(self.protoName != other.protoName):
             return False
         if(('variables' in self) != ('variables' in other)):
             return False
@@ -823,40 +934,40 @@ class Goal:
         return result
 
     def pursue(self):
-        if self.solver.args.verbose > 0:
+        if self.agent.verboseMode(1):
             print 'BEGIN Pursuing this goal: '+self.toString()
             print self.context.details()
 
         if not self.proto and self.isSuccess():
-            if self.solver.args.verbose > 0:
-                print 'Searching for prototype for goal '+self.name
-            proto = self.solver.getDefinitionByTypeAndName('goalProto',self.name)        
+            if self.agent.verboseMode(1):
+                print 'Searching for prototype for goal '+self.protoName
+            proto = self.agent.solver.getDefinitionByTypeAndName('goalProto',self.protoName)        
             if(proto == None):
-                self.solver.reportError(self.name+' is undefined')
+                self.createError('No defintion found for goalProto with name '+self.protoName)
                 return
             self.setProto(proto)
-            if self.solver.args.verbose > 0:
+            if self.agent.verboseMode(1):
                 print 'Goal %s uses prototype %s at %s:%d' % (self.name,self.proto.get('name'),self.proto._file_name,self.proto._start_line_number)
 
         if self.proto is not None:
-            self.solver.beginStatement(self.proto)
+            self.agent.beginStatement(self.proto,self.context)
 
         canSkip = False
         posts = self.proto.findall('post')
         if len(posts) > 0:
             canSkip = True
             for post in posts:                
-                checkPostBefore = Evaluator(self.solver,self.context)
+                checkPostBefore = Evaluator(self.agent,self.context)
                 checkPostBefore.setXML(post[0])
                 checkPostBefore.evaluate()
                 canSkip = canSkip and checkPostBefore.value
-            if canSkip and self.solver.args.verbose > 0:
+            if canSkip and self.verboseMode(1):
                 print 'SKIP '+self.toString()+' because postconditions are already satisfied'
 
         if not canSkip and not self.method and self.isSuccess():
-            methods = self.solver.getDefinitions('method')
+            methods = self.agent.solver.getDefinitions('method')
             if(len(methods) == 0):
-                self.solver.reportError(self.name+' has no methods defined')
+                self.createError(self.name+' has no methods defined')
                 return
             methods.reverse()
 
@@ -864,18 +975,18 @@ class Goal:
             dependent = []
             for method in methods:
                 if self.method == None:
-                    if method.get('targetGoalType') == self.name:
+                    if method.get('targetGoalType') == self.protoName:
                         code = self.evalConditions('pre',method)
-                        if code == True:
+                        if code.isTrue():
                             self.method = method
-                            if self.solver.args.verbose > 0:
+                            if self.agent.verboseMode(1):
                                 print 'SELECTED '+method.get('name')+' to achieve goal '+self.name
-                        elif code == False:
-                            if self.solver.args.verbose > 0:
+                        elif code.isFalse():
+                            if self.agent.verboseMode(1):
                                 print 'REJECTED '+method.get('name')+' to achieve goal '+self.name
                         else:
                             dependent.append(method)
-                            if self.solver.args.verbose > 0:
+                            if self.agent.verboseMode(1):
                                 print 'QUEUED   '+method.get('name')+' to achieve goal '+self.name
 
             for method in dependent:
@@ -883,35 +994,38 @@ class Goal:
                     code = self.solveConditions('pre',method)
                     if code == True:
                         self.method = method
-                    elif self.solver.args.verbose > 0:
+                    elif self.agent.verboseMode(1):
                         print 'UNSOLVABLE '+method.get('name')+' to achieve goal '+self.name
+
+            if self.method == None:
+                self.createError('No method found to solve %s' % self.toString())
 
         if not canSkip and self.isSuccess():
             self.checkPre()
 
         if not canSkip and self.method != None and self.isSuccess():
-            self.solver.beginStatement(self.method)
+            self.agent.beginStatement(self.method,self.context)
             for stmt in self.method.findall('*'):
                 self.execute(stmt)
-            self.solver.endStatement(self.method)
+            self.agent.endStatement(self.method,self.context)
 
-        if self.solver.args.verbose > 0:
+        if self.agent.verboseMode(1):
             if not self.isSuccess():
                 for error in self.errors:
                     print 'ERROR: '+error
             print 'END   Pursuing this goal: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+')'
         if self.proto is not None:
-            self.solver.endStatement(self.proto)
+            self.agent.endStatement(self.proto,self.context)
 
     def execute(self,stmt):
         self.execute_r(self.context.root.lookupTermList(True,['goal'],self),stmt)
 
     def execute_r(self,contextPre,stmt):
-        self.solver.beginStatement(stmt)
+        self.agent.beginStatement(stmt,self.context)
         context = contextPre
         if 'name' in stmt.attrib:
             context = context.lookupTermList(True,[stmt.get('name')],self)
-            if self.solver.args.verbose > 0:
+            if self.agent.verboseMode(1):
                 print 'ENTER CONTEXT '+context.getPath('.')
         if stmt.tag == 'pre':
             self.checkExpr(stmt)
@@ -925,27 +1039,27 @@ class Goal:
             count = None
             for child in stmt:
                 if child.tag == 'count':
-                    count = Evaluator(self.solver,self.context)
+                    count = Evaluator(self.agent,self.context)
                     count.setXML(child[0])
                     count.evaluate()
 
             if count != None:
                 for index in range(0,int(count.getRvalue())):
-                    if self.solver.args.verbose > 0:
+                    if self.agent.verboseMode(1):
                         print 'BEGIN %s[%d]' % (stmt.get('name'),index)
                     for child in stmt:
                         if child.tag != 'count':
                             if self.isSuccess():
                                 self.execute_r(context,child) # !! wrong, should have subcontext with index defined
-                    if self.solver.args.verbose > 0:
+                    if self.agent.verboseMode(1):
                         print 'END %s[%d]' % (stmt.get('name'),index)
         elif stmt.tag == 'task':
-            if self.solver.args.verbose > 0:
+            if self.agent.verboseMode(1):
                 print 'BEGIN Task %s' % stmt.get('name')
             for sub in stmt:
                 if self.isSuccess():
                     self.execute_r(context,sub)
-            if self.solver.args.verbose > 0:
+            if self.agent.verboseMode(1):
                 print 'END   Task %s' % stmt.get('name')
         elif stmt.tag == 'shell':
             sys.stdout.flush()
@@ -954,20 +1068,20 @@ class Goal:
             shellCommand = None
             for child in children:
                 if(child.tag == 'command'):
-                    shellCommand = self.solver.interpolateInner(self.context,child,self)
+                    shellCommand = self.agent.interpolateInner(self.context,child,self)
                 if(child.tag == 'send'):
                     cmd = ''
                     if(shellCommand != None):
                         cmd = shellCommand+' '
 
-                    cmd += self.solver.interpolateInner(self.context,child,self)
+                    cmd += self.agent.interpolateInner(self.context,child,self)
 
                     if self.hasErrors():
                         print "ERRORS %s" % cmd
-                    elif self.solver.args.pursue:
+                    elif self.agent.solver.args.pursue:
                         print "SYSTEM %s" % cmd
                         lastCommand = pexpect.run(cmd,withexitstatus=1)
-                        if self.solver.args.verbose > 0:
+                        if self.agent.verboseMode(1):
                             print lastCommand[0]
                         if 'name' in child.attrib:
                             stdoutVar = context.lookupTermList(True,[child.get('name'),'stdout'],self)
@@ -975,19 +1089,19 @@ class Goal:
                             stdoutVar.setValue(lastCommand[0])
                             rcVar.setValue(lastCommand[1])
                         if 'onFail' not in child.attrib or child.get('onFail') == 'stop':
-                            self.createErrorAt(child,'COMMAND RC=%d : %s'+lastCommand[1],cmd)
+                            self.createErrorAt(child,'COMMAND RC=%d : %s' % (lastCommand[1],cmd))
                             lines = '\n'.split(lastCommand[0])
                             for line in lines:
                                 self.createErrorAt(child,line)
                     else:
                         print "PLAN  %s" % cmd
                 elif(child.tag == 'receive'):
-                    cmd = self.solver.interpolateInner(self.context,child,self)
+                    cmd = self.agent.interpolateInner(self.context,child,self)
 
                     print "EXPECT %s" % cmd
                     if self.hasErrors():
                         print "ERRORS %s" % cmd
-                    elif self.solver.args.pursue:
+                    elif self.agent.solver.args.pursue:
                         match = re.search(pattern)
                         if match:
                             self.useMatch(child,match)
@@ -1001,10 +1115,10 @@ class Goal:
             node = self.allocVariable(stmt.get('name'))
             self.setVariable(stmt.get('name'),file.name)
             self.tempFiles.append(file)
-            print >>file, self.solver.interpolateInner(self.context,stmt,self)
+            print >>file, self.agent.interpolateInner(self.context,stmt,self)
             file.flush()
         elif stmt.tag == 'op' or stmt.tag == 'get':
-            evaluator = Evaluator(self.solver,self.context)
+            evaluator = Evaluator(self.agent,self.context)
             evaluator.setXML(stmt)
             evaluator.evaluate()
             if not evaluator.isSuccess():
@@ -1014,13 +1128,13 @@ class Goal:
             elif bool(evaluator.getRvalue()) != True:
                 self.createErrorAt(stmt,'Statement failed to execute or expression returned zero/False')                
         else:
-            if self.solver.args.verbose > 0:
+            if self.agent.verboseMode(1):
                 print 'SKIP tag %s which is neither a statement nor an expression' % stmt.tag
 
         if 'name' in stmt.attrib:
-            if self.solver.args.verbose > 0:
+            if self.agent.verboseMode(1):
                 print 'RETURN CONTEXT '+contextPre.getPath('.')
-        self.solver.endStatement(stmt)
+        self.agent.endStatement(stmt,self.context)
 
 class Task:
     def __init__(self,goal):
@@ -1054,6 +1168,7 @@ class ConfigNode:
         self.fields = dict()
         self.elements = []
         self.parent = None
+        self.typeName = None
 
     def copyFrom(self,other):
 #        print 'DEBUG: BEGIN ConfigNode.copyFrom('+self.getPath('.')+' <= '+other.getPath('.')+')'
@@ -1069,15 +1184,15 @@ class ConfigNode:
                 self.fields[key] = ConfigNode(self.rootConfig,key)
                 self.fields[key].setParent(self)
             self.fields[key].copyFrom(other.fields[key])
+        self.typeName = other.typeName
  #       print 'DEBUG: END   ConfigNode.copyFrom('+self.getPath('.')+' <= '+other.getPath('.')+')'
 
     def details(self):
         result = ''
-        result += '%s = %s\n' % (self.getPath('.'),self.getValue())
+        result += '%s = %s (%s)\n' % (self.getPath('.'),self.getValue(),self.typeName if self.typeName != None else '?')
         for key,field in self.fields.iteritems():
             result += field.details()
         return result
-
 
     def initState(self,solver,xml):
         if solver.args.verbose > 0:
@@ -1104,13 +1219,11 @@ class ConfigNode:
                     print 'Unable to interpret this XML expression: '+result.errors[0]
                 else:
                     self.setValue(result.value)
+        if 'type' in xml.attrib:
+            self.typeName = xml.get('type')
+
         if solver.args.verbose > 0:
             print "END   initState(%s) at %s:%d" % (self.getPath('.'),xml._file_name,xml._start_line_number)
-
-    def initPath(self,method,symbolPath,value):
-        configNode = self.lookupTermList(True,symbolPath,None)
-#        print method+' sets '+configNode.getPath('.')+' to '+jsonpickle.encode(value)
-        configNode.setValue(value)
 
     def setValue(self,value):
         if isinstance(value,ConfigNode):
@@ -1128,12 +1241,14 @@ class ConfigNode:
     def setParent(self,parent):
         self.parent = parent
 
-    def getPath(self,char):
+    def getPath(self,char,prefixNode=None,absolute=True):
         result = ''
-        if self.parent:
-            result += self.parent.getPath(char)
-            result += char
-        result += self.name
+        if self != prefixNode:
+            if self.parent:
+                if self.parent.parent or absolute:
+                    result += self.parent.getPath(char,prefixNode,absolute)
+                    result += char
+            result += self.name
         return result
 
     def lookupElement(self,create,xmlExpr,errHandler):
@@ -1202,6 +1317,36 @@ class ConfigNode:
             print 'END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         return result
 
+    def reconfigure(self,stateConfig,prefixNode):
+ #       if self.typeName == None:
+ #           print 'DEBUG: path has no type %s' % self.getPath('.')
+        if self.typeName != None and self.selected == None:
+ #           print 'DEBUG: path %s needs configuration type %s' % (self.getPath('.'),self.typeName)
+            self.values = stateConfig.findCandidatesByTypeName(self.typeName)
+        if len(self.values) == 0:
+            for key,field in self.fields.iteritems():
+                field.reconfigure(stateConfig,prefixNode)
+            for element in self.elements:
+                element.reconfigure(stateConfig,prefixNode)
+
+    def findCandidatesByTypeName(self,typeName,values):
+#        print 'DEBUG: checking path %s for type %s' % (self.getPath('.'),typeName)
+        if self.typeName == typeName:
+ #           print 'DEBUG: found path %s has type %s' % (self.getPath('.'),typeName)
+            values.append(self.getPath('.',absolute=False))
+        for key,field in self.fields.iteritems():
+            field.findCandidatesByTypeName(typeName,values)
+        for element in self.elements:
+            element.findCandidatesByTypeName(typeName,values)
+
+    def tallyOptions(self,options):
+        if len(self.values) > 0:
+            options[self.getPath('.',absolute=False)] = self.values
+        for key,field in self.fields.iteritems():
+            field.tallyOptions(options)
+        for element in self.elements:
+            element.tallyOptions(options)
+
 class Config:
     def __init__(self,name,desc,solver):
         self.root = ConfigNode(self,name)
@@ -1220,23 +1365,38 @@ class Config:
     def copyFrom(self,other):
         self.root.copyFrom(other.root)
 
-class Invocation:
-    def __init__(self,solver,command):
-        self.solver = solver
-        self.command = command
-        self.series = []
-        self.state = 'init'
+    def reconfigure(self,stateConfig,prefix):
+#        print 'DEBUG: BEGIN Config.reconfigure'
+        self.root.lookupTermList(False,['goal'],None).reconfigure(stateConfig,self.root.lookupTermList(False,[prefix],None))
+#        print 'DEBUG: END   Config.reconfigure'
 
-    def default(self):
-        first = Config(self.command,'Default context for '+self.toString(),self.solver)
-        #first.setup() !!
-        self.series.append(first)
+    def findCandidatesByTypeName(self,typeName):
+#        print 'DEBUG: looking for candidates of type %s' % typeName
+        values = []
+        self.root.findCandidatesByTypeName(typeName,values)
+        return values
 
-    def top(self):
-        return self.series[len(self.series)-1]
+    def tallyOptions(self):
+        options = dict()
+        self.root.tallyOptions(options)
+        return options
 
-    def propose(self,config):
-        self.series.append(config.correct())
+    def initPath(self,method,symbolPath,value):
+        configNode = self.root.lookupTermList(True,symbolPath,None)
+        configNode.setValue(value)
 
-    def undo(self):
-        self.series.pop()
+class ConfigController:
+    def __init__(self,config):
+        self.config = config
+
+    def printText(self):
+#        print 'DEBUG: ConfigController.printText called'
+        result = 'Additional options must be configured with the command line. Try these suggestions:\n'
+        options = self.config.tallyOptions()
+#        print 'DEBUG: %d options returned' % len(options)
+        for path in options.keys():
+            result += 'Choose One:\n'
+            for value in options[path]:
+                result += '     %s=%s\n' % (path,value)
+            result += '\n'
+        return result

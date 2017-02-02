@@ -10,10 +10,10 @@
         </struct>
         <struct name="i-02e3afedc1a92b410" type="EC2Node">
             <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
+            <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">54.89.82.240</variable>
             <struct name="credentials" type="SSHCredentials">
                 <describe locale="en-US">SSH/TLS username and certificate</describe>
                 <variable name="user" type="username">ec2-user</variable>
-                <variable name="address" type="usa.darpa.rfc971.ipv4address">54.89.82.240</variable>
                 <struct name="certificate" type="SSLCertificate">
                     <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
                 </struct>
@@ -21,10 +21,10 @@
         </struct>
         <struct name="i-0375a11f5e322ee0d" type="EC2Node">
             <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
+            <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.23.220.50</variable>
             <struct name="credentials" type="SSHCredentials">
                 <describe locale="en-US">SSH/TLS username and certificate</describe>
                 <variable name="user" type="username">ec2-user</variable>
-                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.23.220.50</variable>
                 <struct name="certificate" type="SSLCertificate">
                     <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
                 </struct>
@@ -38,30 +38,37 @@
                     <variable name="localFilePath" type="localFilePath">~/.ssh/expero-us-east-2.pem</variable>
                 </struct>
             </struct>
-            <struct name="TNode0" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-05af501073923f7ce</variable>
-                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.52.56</variable>
+            <struct name="budget">
+                <struct name="LargeNode" type="EC2Node">
+                    <variable name="budget">4</variable>
+                </struct>
             </struct>
-            <struct name="TNode1" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-068acbba609252604</variable>
-                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.100.138</variable>
-            </struct>
-            <struct name="TNode2" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-02aeeb57787d459dd</variable>
-                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.75.181</variable>
-            </struct>
-            <struct name="TNode3" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-00c68b14a1691f57e</variable>
-                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.99.7</variable>
-            </struct>
-            <struct name="SNode0" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-0959911e46c66a28a</variable>
-                <variable name="address" type="usa.darpa.rfc971.ipv4address">52.14.81.63</variable>
+            <struct name="allocated">
+                <struct name="TNode0" type="EC2Node">
+                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                    <variable name="instance" type="string">i-05af501073923f7ce</variable>
+                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.52.56</variable>
+                </struct>
+                <struct name="TNode1" type="EC2Node">
+                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                    <variable name="instance" type="string">i-068acbba609252604</variable>
+                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.100.138</variable>
+                </struct>
+                <struct name="TNode2" type="EC2Node">
+                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                    <variable name="instance" type="string">i-02aeeb57787d459dd</variable>
+                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.75.181</variable>
+                </struct>
+                <struct name="TNode3" type="EC2Node">
+                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                    <variable name="instance" type="string">i-00c68b14a1691f57e</variable>
+                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.99.7</variable>
+                </struct>
+                <struct name="SNode0" type="EC2Node">
+                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                    <variable name="instance" type="string">i-0959911e46c66a28a</variable>
+                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.81.63</variable>
+                </struct>
             </struct>
         </struct>
     </state>
@@ -71,7 +78,7 @@
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
-        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
@@ -82,7 +89,7 @@
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
-        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
@@ -93,7 +100,7 @@
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
-        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
@@ -104,7 +111,7 @@
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
-        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
@@ -116,7 +123,7 @@
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
-        <pre><defined><get>goal.node.address</get></defined></pre>
+        <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
@@ -129,6 +136,7 @@
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <tempFile name="dataStaxYumRepo">
+                <describe locale="en_US">Create temp file with YUM repository entry for datastax</describe>
 [datastax]
 name = DataStax Repo for DataStax Enterprise
 baseurl=https://<get>goal.dseCreds.user</get>:<python name="urllib.quote_plus"><get>goal.dseCreds.password</get></python>@rpm.datastax.com/enterprise
@@ -136,50 +144,74 @@ enabled=1
 gpgcheck=0
             </tempFile>
             <shell>
+                <describe locale="en_US">Copy YUM repository entry file to <get>goal.node.publicIP</get> using scp</describe>
                 <label>cpYumConfigForDatastax</label>
-                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get>:datastax.repo
+                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get>:datastax.repo
                 </send>
             </shell>
             <shell>
+                <describe locale="en_US">Make sure YUM program is installed on <get>goal.node.publicIP</get> using apt-get</describe>
                 <label>installYum</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo apt-get --assume-yes install yum*</send>
             </shell>
             <shell>
+                <describe locale="en_US">Move datastax YUM repo to /etc using sudo</describe>
                 <label>copyDSEReposFile</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo cp ~<get>goal.ec2Creds.user</get>/datastax.repo /etc/yum/repos.d/</send>
             </shell>
             <shell>
+                <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.publicIP</get> using yum</describe>
                 <label>installJava1.8</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo yum -y install java-1.8.0</send>
                 <send name="command" onFail="stop">sudo yum -y remove java-1.7.0-openjdk</send>
             </shell>
             <shell>
+                <describe locale="en_US">Make sure DSE full product package is installed on <get>goal.node.publicIP</get> using yum</describe>
                 <label>installDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo yum -y install dse-full</send>
             </shell>
             <shell>
+                <describe locale="en_US">Adjust cassandra.yaml to match best practice initial values on <get>goal.node.publicIP</get></describe>
                 <label>fix_cassandra_yaml</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
                 <send name="command" onFail="stop">sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
                 <send name="command" onFail="stop">sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
             </shell>
         </do>
     </method>
-    <method name="startCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
+    <method name="startCassandraLocally" targetGoalType="startCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
-        <DISABLE-pre>
-            <op name="eq"><get>host.uname</get><string>Linux</string></op>
-        </DISABLE-pre>
+        <pre>
+            <op name="eq"><get>host.hostip</get><get>goal.node.publicIP</get></op>
+        </pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <shell>
                 <label>startDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <send name="command">sudo service dse start</send>
+            </shell>
+        </do>
+    </method>
+    <method name="startCassandraNodeOverSSHToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
+        <pre>
+            <bool>False</bool>
+            <op name="ne"><get>host.hostip</get><get>goal.node.publicIP</get></op>
+            <op name="or">
+                <op name="eq"><get>host.uname</get><string>Linux</string></op>
+                <op name="eq"><get>host.uname</get><string>Darwin</string></op>
+            </op>
+        </pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
+        <do>
+            <shell>
+                <label>startDSEService</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="ignore">sudo service dse start</send>
             </shell>
             <op name="isZero"><get>goal.command.rc</get></op>
@@ -194,7 +226,7 @@ gpgcheck=0
         <do>
             <shell>
                 <label>stopDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo service dse stop</send>
             </shell>
         </do>
@@ -208,7 +240,7 @@ gpgcheck=0
         <do>
             <shell>
                 <label>uninstallDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo yum -y remove dse-full</send>
             </shell>
         </do>
@@ -219,7 +251,7 @@ gpgcheck=0
         <do>
             <shell>
                 <label>installLoader</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.address</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">mkdir -p <get>goal.workDir</get></send>
                 <send name="command" onFail="stop">cd <get>goal.workDir</get></send>
                 <send name="command" onFail="stop">wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
