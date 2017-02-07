@@ -1,100 +1,98 @@
 <hive name="CassandraExperiment">
-    <state>
-        <struct name="RecommendedEC2ConfigForDSEGDemo">
-            <describe locale="en-US">The recommended cluster configuration in EC2 for a DSEG development or demo exercise</describe>
-            <referenceDoc><url>https://docs.google.com/document/d/1IWGEkeJQy82lFBZhXm0CgS5wUO5oHqq3AWv4y3XwcGw/edit#heading=h.30j0zll</url></referenceDoc>
-            <struct name="analyticNodes" type="EC2ClusterConfiguration">
-                <variable name="numNodes" type="int">6</variable>
-                <variable name="image" type="string">ami-f7290c92</variable>
-                <variable name="instanceType" type="string">m4.large</variable>
-                <variable name="instancePrefix" type="string">ANode</variable>
-                <variable name="region" type="string">us-east-2</variable>
-                <variable name="networkAdapterName" type="string">enet0</variable>
-                <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
-            </struct>
-            <struct name="transactionalNodes" type="EC2ClusterConfiguration">
-                <variable name="numNodes" type="int">6</variable>
-                <variable name="image" type="string">ami-f7290c92</variable>
-                <variable name="instanceType" type="string">m4.large</variable>
-                <variable name="instancePrefix" type="string">TNode</variable>
-                <variable name="region" type="string">us-east-2</variable>
-                <variable name="networkAdapterName" type="string">enet0</variable>
-                <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
-            </struct>
-            <struct name="opsNode" type="EC2ClusterConfiguration">
-                <variable name="numNodes" type="int">1</variable>
-                <variable name="image" type="string">ami-f7290c92</variable>
-                <variable name="instanceType" type="string">m4.large</variable>
-                <variable name="instancePrefix" type="string">OpsNode</variable>
-                <variable name="region" type="string">us-east-2</variable>
-                <variable name="networkAdapterName" type="string">enet0</variable>
-                <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+    <struct name="RecommendedEC2ConfigForDSEGDemo">
+        <describe locale="en-US">The recommended cluster configuration in EC2 for a DSEG development or demo exercise</describe>
+        <referenceDoc><url>https://docs.google.com/document/d/1IWGEkeJQy82lFBZhXm0CgS5wUO5oHqq3AWv4y3XwcGw/edit#heading=h.30j0zll</url></referenceDoc>
+        <struct name="analyticNodes" type="EC2ClusterConfiguration">
+            <variable name="numNodes" type="int">6</variable>
+            <variable name="image" type="string">ami-f7290c92</variable>
+            <variable name="instanceType" type="string">m4.large</variable>
+            <variable name="instancePrefix" type="string">ANode</variable>
+            <variable name="region" type="string">us-east-2</variable>
+            <variable name="networkAdapterName" type="string">enet0</variable>
+            <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+        </struct>
+        <struct name="transactionalNodes" type="EC2ClusterConfiguration">
+            <variable name="numNodes" type="int">6</variable>
+            <variable name="image" type="string">ami-f7290c92</variable>
+            <variable name="instanceType" type="string">m4.large</variable>
+            <variable name="instancePrefix" type="string">TNode</variable>
+            <variable name="region" type="string">us-east-2</variable>
+            <variable name="networkAdapterName" type="string">enet0</variable>
+            <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+        </struct>
+        <struct name="opsNode" type="EC2ClusterConfiguration">
+            <variable name="numNodes" type="int">1</variable>
+            <variable name="image" type="string">ami-f7290c92</variable>
+            <variable name="instanceType" type="string">m4.large</variable>
+            <variable name="instancePrefix" type="string">OpsNode</variable>
+            <variable name="region" type="string">us-east-2</variable>
+            <variable name="networkAdapterName" type="string">enet0</variable>
+            <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+        </struct>
+    </struct>
+    <struct name="i-02e3afedc1a92b410" type="EC2Node">
+        <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
+        <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">54.89.82.240</variable>
+        <struct name="credentials" type="SSHCredentials">
+            <describe locale="en-US">SSH/TLS username and certificate</describe>
+            <variable name="user" type="username">ec2-user</variable>
+            <struct name="certificate" type="SSLCertificate">
+                <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
             </struct>
         </struct>
-        <struct name="i-02e3afedc1a92b410" type="EC2Node">
-            <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
-            <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">54.89.82.240</variable>
-            <struct name="credentials" type="SSHCredentials">
-                <describe locale="en-US">SSH/TLS username and certificate</describe>
-                <variable name="user" type="username">ec2-user</variable>
-                <struct name="certificate" type="SSLCertificate">
-                    <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
-                </struct>
+    </struct>
+    <struct name="i-0375a11f5e322ee0d" type="EC2Node">
+        <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
+        <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.23.220.50</variable>
+        <struct name="credentials" type="SSHCredentials">
+            <describe locale="en-US">SSH/TLS username and certificate</describe>
+            <variable name="user" type="username">ec2-user</variable>
+            <struct name="certificate" type="SSLCertificate">
+                <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
             </struct>
         </struct>
-        <struct name="i-0375a11f5e322ee0d" type="EC2Node">
-            <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
-            <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.23.220.50</variable>
-            <struct name="credentials" type="SSHCredentials">
-                <describe locale="en-US">SSH/TLS username and certificate</describe>
-                <variable name="user" type="username">ec2-user</variable>
-                <struct name="certificate" type="SSLCertificate">
-                    <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
-                </struct>
+    </struct>
+    <struct name="DSEDemoCluster" type="EC2Cluster">
+        <struct name="credentials" type="SSHCredentials">
+            <describe locale="en-US">SSH/TLS username and certificate</describe>
+            <variable name="user" type="username">ubuntu</variable>
+            <struct name="certificate" type="SSLCertificate">
+                <variable name="localFilePath" type="localFilePath">~/.ssh/expero-us-east-2.pem</variable>
             </struct>
         </struct>
-        <struct name="DSEDemoCluster" type="EC2Cluster">
-            <struct name="credentials" type="SSHCredentials">
-                <describe locale="en-US">SSH/TLS username and certificate</describe>
-                <variable name="user" type="username">ubuntu</variable>
-                <struct name="certificate" type="SSLCertificate">
-                    <variable name="localFilePath" type="localFilePath">~/.ssh/expero-us-east-2.pem</variable>
-                </struct>
-            </struct>
-            <struct name="budget">
-                <struct name="LargeNode" type="EC2Node">
-                    <variable name="budget">4</variable>
-                </struct>
-            </struct>
-            <struct name="allocated">
-                <struct name="TNode0" type="EC2Node">
-                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                    <variable name="instance" type="string">i-05af501073923f7ce</variable>
-                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.52.56</variable>
-                </struct>
-                <struct name="TNode1" type="EC2Node">
-                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                    <variable name="instance" type="string">i-068acbba609252604</variable>
-                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.100.138</variable>
-                </struct>
-                <struct name="TNode2" type="EC2Node">
-                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                    <variable name="instance" type="string">i-02aeeb57787d459dd</variable>
-                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.75.181</variable>
-                </struct>
-                <struct name="TNode3" type="EC2Node">
-                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                    <variable name="instance" type="string">i-00c68b14a1691f57e</variable>
-                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.99.7</variable>
-                </struct>
-                <struct name="SNode0" type="EC2Node">
-                    <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                    <variable name="instance" type="string">i-0959911e46c66a28a</variable>
-                    <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.81.63</variable>
-                </struct>
+        <struct name="budget">
+            <struct name="LargeNode" type="EC2Node">
+                <variable name="budget">4</variable>
             </struct>
         </struct>
-    </state>
+        <struct name="allocated">
+            <struct name="TNode0" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-05af501073923f7ce</variable>
+                <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.52.56</variable>
+            </struct>
+            <struct name="TNode1" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-068acbba609252604</variable>
+                <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.100.138</variable>
+            </struct>
+            <struct name="TNode2" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-02aeeb57787d459dd</variable>
+                <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.75.181</variable>
+            </struct>
+            <struct name="TNode3" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-00c68b14a1691f57e</variable>
+                <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.99.7</variable>
+            </struct>
+            <struct name="SNode0" type="EC2Node">
+                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
+                <variable name="instance" type="string">i-0959911e46c66a28a</variable>
+                <variable name="publicIP" type="usa.darpa.rfc971.ipv4address">52.14.81.63</variable>
+            </struct>
+        </struct>
+    </struct>
     <goalProto name="setupCassandraNode" symbol="goal">
         <describe locale="en-US">Configure EC2 node to run the Datastax Enterprise Graph Example</describe>
         <variable name="node" type="EC2Node"/>

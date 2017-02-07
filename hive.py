@@ -259,8 +259,10 @@ class Solver:
         for element in xmlDefinitions.findall('*'):
             if 'name' in element.attrib:
                 self.addDefinition(element)
-            elif element.tag == 'state':
+            if element.tag == 'variable' or element.tag == 'list' or element.tag == 'struct':
                 self.addStateDef(element)
+            else:
+                self.createError('%s:%d: attribute name must be present on all top-level XML nodes, which are considered to be Hive definitions' % (element._file_name,element._start_line_number))
 
     def addDefinition(self,xmlDefinition):
         typeName = xmlDefinition.tag
@@ -273,9 +275,6 @@ class Solver:
 
     def addStateDef(self,xmlDef):
         self.stateDefs.append(xmlDef)
-
-    def getStateDefs(self):
-        return self.stateDefs
 
     def getDefinitions(self,typeName):
         result = []
@@ -293,6 +292,9 @@ class Solver:
                 return defn
         return None
 
+    def createError(self,error):
+        self.reportError(error)
+
     def reportError(self,errMsg):
         print 'ERROR: '+errMsg
         self.result = False
@@ -301,11 +303,11 @@ class Solver:
         return len(self.errors) > 0
 
     def initialize(self):
-        for stateNode in self.getStateDefs():
-            position = '%s:%d' % (stateNode._file_name,stateNode._start_line_number)
+        for xml in self.stateDefs:
+            position = '%s:%d' % (xml._file_name,xml._start_line_number)
             if self.verboseMode(1):
                 print 'BEGIN Processing <state> element at '+position
-            self.state.root.initState(self,self.state,stateNode)
+            self.state.root.initStateNode(self,self.state,xml)
             if self.verboseMode(1) :
                 print 'END   Processing <state> element at '+position
 
@@ -613,7 +615,7 @@ class Evaluator:
         if self.expr.tail:
             self.tail = self.expr.tail
 
-        if self.agent.verboseMode(1):
+        if self.agent.verboseMode(2):
             print 'BEGIN evaluating expression '+self.expr.tag+' at '+self.label
 
         interpreted = False
@@ -791,7 +793,7 @@ class Evaluator:
         if not interpreted and len(self.errors) == 0:
             self.createError('Cannot interpret this expression')
 
-        if self.agent.verboseMode(1):
+        if self.agent.verboseMode(2):
             print 'END   evaluating expression '+self.expr.tag+' at '+self.label+' with result: '+(str(self.getRvalue()) if self.isSuccess() else self.getOutcome().tostring())
 
 
@@ -830,7 +832,7 @@ class Goal:
         goalNode.setupStruct()
         if self.agent.verboseMode(1):
             print 'DEBUG: BEGIN configuring goal %s at %s:%d' % (name,argXML._file_name,argXML._start_line_number)
-        goalNode.initState(self.agent.solver,argContext,argXML)
+        goalNode.initStateChildren(self.agent.solver,argContext,argXML)
         if self.agent.verboseMode(1):
             print 'DEBUG: END   configuring goal %s at %s:%d' % (name,argXML._file_name,argXML._start_line_number)
 
@@ -841,7 +843,7 @@ class Goal:
 
         # allocate state for <variable> tags under <goalProto>
         goalNode = self.context.root.lookupTermList(True,['goal'],self.agent)
-        goalNode.initState(self.agent.solver,self.agent.state,xmlProto)
+        goalNode.initStateChildren(self.agent.solver,self.agent.state,xmlProto)
 
         # handle state overrides from cmdline
         parser = argparse.ArgumentParser()
@@ -1185,7 +1187,7 @@ class Goal:
                     for cmd in cmdList:
                         if self.hasErrors():
                             print "ERRORS %s" % cmd
-                        elif self.agent.solver.args.pursue:
+                        elif self.agent.solver.args.execute:
                             print "SYSTEM %s" % cmd
                             lastCommand = pexpect.run(cmd,withexitstatus=1)
                             if self.agent.verboseMode(1):
@@ -1211,7 +1213,7 @@ class Goal:
                     print "EXPECT %s" % cmd
                     if self.hasErrors():
                         print "ERRORS %s" % cmd
-                    elif self.agent.solver.args.pursue:
+                    elif self.agent.solver.args.execute:
                         match = re.search(pattern)
                         if match:
                             self.useMatch(child,match)
@@ -1399,10 +1401,19 @@ class ConfigNode:
         if self.elements == None:
             self.elements = []
 
-    def initState(self,solver,context,xml):
+    def initStateNode(self,solver,context,xml):
+        if xml.tag == 'struct':
+            self.setupStruct()
+        elif xml.tag == 'list':
+            self.setupList()
+        node = self.lookupTermList(True,[xml.get('name')],solver)
+        node.initStateChildren(solver,context,xml)
+        return node
+
+    def initStateChildren(self,solver,context,xml):
         if solver.args.verbose > 0:
             print "BEGIN initState(%s) at %s:%d" % (self.getPath('.'),xml._file_name,xml._start_line_number)
-        if xml.tag == 'struct' or xml.tag == 'state' or xml.tag == 'goalCompleted' or xml.tag == 'goalProto':
+        if xml.tag == 'struct' or xml.tag == 'goalCompleted' or xml.tag == 'goalProto':
 #            if self.getValue() == None:
 #                struct = dict()
 #                self.setValue(struct)
@@ -1413,8 +1424,7 @@ class ConfigNode:
             for child in xml:
                 childName = child.get('name')
                 if childName != None:
-                    node = self.lookupTermList(True,[childName],solver)
-                    node.initState(solver,context,child)
+                    self.initStateNode(solver,context,child)
 #                struct[child.get('name')] = node.getValue()
         elif xml.tag == 'variable' or xml.tag == 'list':
             if xml.tag == 'list':
@@ -1502,15 +1512,15 @@ class ConfigNode:
 
     def lookupTermList(self,create,pathTerms,errHandler):
         result = None
-        if self.rootConfig.solver.args.verbose > 0:
+        if self.rootConfig.solver.verboseMode(1):
             print 'BEGIN lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         if(len(pathTerms) == 0):
             result = self
 #            print 'DEBUG: no more path terms'
         elif pathTerms[0] == '':
-            raise RuntimeError('empty field name')
+            if errHandler != None: errHandler.createError('empty field name at %s' % self.getPath('.'))
         elif self.fields == None:
-            raise RuntimeError('%s is not configured as struct with fields' % self.getPath('.'))
+            if errHandler != None: errHandler.createError('%s is not configured as struct with any fields while looking for field %s' % (self.getPath('.'),pathTerms[0]))
         else:
             if pathTerms[0] not in self.fields:
 #                print 'DEBUG: field '+pathTerms[0]+' is missing from '+self.getPath('.')
@@ -1520,7 +1530,7 @@ class ConfigNode:
                     self.fields[pathTerms[0]] = newNode
                     if len(pathTerms) > 1:
                         newNode.setupStruct()
-                elif errHandler:
+                elif errHandler != None:
                     errHandler.createError('No field named '+pathTerms[0]+' in expression '+self.getPath('.')+' fields include '+(','.join(self.fields.keys())))
                     return None
                 else:
@@ -1530,7 +1540,7 @@ class ConfigNode:
 
 #            print 'DEBUG: found field named '+pathTerms[0]
             result = self.fields[pathTerms[0]].lookupTermList(create,pathTerms[1:],errHandler)
-        if self.rootConfig.solver.args.verbose > 0:
+        if self.rootConfig.solver.verboseMode(1):
             print 'END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         return result
 
@@ -1580,7 +1590,7 @@ class Config:
         self.solver = solver
 
     def setup(self,name,xmlProto):
-        self.root.initState(self.solver,self.solver.state,xmlProto)
+        self.root.initStateChildren(self.solver,self.solver.state,xmlProto)
 #        print 'DEBUG: initial state of %s is:\n%s' % (self.desc,self.details())
 
     def toString(self):

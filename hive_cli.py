@@ -7,11 +7,11 @@ import xml.etree.ElementTree as ElementTree
 
 parser = argparse.ArgumentParser(description="Hive Command-Line Interpreter")
 parser.add_argument('program',nargs='+')
-parser.add_argument('--list',action='store_true')
-parser.add_argument('--plan',nargs='?')
-parser.add_argument('--pursue',nargs='?')
-parser.add_argument('--verbose','-v',action='count')
-parser.add_argument('--narrate','-n',action='count')
+parser.add_argument('--list',action='store_true',help='List all Hive definitions')
+parser.add_argument('--plan',nargs='?',help='Compute a plan of action that would be taken to execute a goal without actually running it (dry run).')
+parser.add_argument('--execute',nargs='?',help='Execute a goal')
+parser.add_argument('--verbose','-v',action='count',help='Add an extremely detailed debug trace to stdout')
+parser.add_argument('--narrate','-n',action='count',help='Print easy-to-read single-line (concise) comments that describe the goals being executed and progress toward completing each')
 tup = parser.parse_known_args()
 solverArgs = tup[0]
 
@@ -29,12 +29,12 @@ if(solverArgs.list):
     print tabulator.printText()
 
 topGoal = None
-if(solverArgs.plan or solverArgs.pursue):
+if(solverArgs.plan or solverArgs.execute):
     goalName = ''
     if(solverArgs.plan):
         goalName = solverArgs.plan
-    elif(solverArgs.pursue):
-        goalName = solverArgs.pursue
+    elif(solverArgs.execute):
+        goalName = solverArgs.execute
 
 
     solver.initialize()
