@@ -43,7 +43,11 @@ Features:
     - [ ] UC Tested
     - [ ] UC Documented
 - [ ] Distributed Recipes: dynamically provisioning robust EC2 instances
-    - [ ] enhanced Cassandra provisioning recipes using ec2 api to obtain instances
+    - [x] enhanced Cassandra provisioning recipes using ec2 api to obtain instances
+    - [x] ProvisionEC2Cluster recipe for procuring EC2 instance for Datastax cluster
+    - [x] find/in/do task statements
+    - [x] goalCompleted as an executable statement (spawned subgoal)
+    - [x] using <set> and <get> as lvalue and rvalue in <python><code> blocka
     - [ ] install and invoke hive agency on remote node
     - [ ] agent program and state exchange b/w participants
         - [ ] ConfigMonitor, ConfigUpdater python classes
@@ -62,9 +66,21 @@ Features:
 - [ ] securing peer to peer communication
     - [ ] hive_agency require authentication for node2node
     - [ ] require configured SSL encryption for node2node
-- [ ] agency resilience
-    - [ ] local persistent state backend for agent, goal, solver state
-    - [ ] resuming agency operation on restart
+- [ ] Web-based Hive Control Center
+    - [ ] monitoring agents and goals
+        - [ ] browse/inspect running agents
+        - [ ] browse/inspect goals per agent
+        - [ ] load hive program from file
+    - [ ] send and monitor basic commands
+        [ ] basic Flask-based RESTful service
+        [ ] schema-independent React/Redux front-end
+        [ ] ObjectWindow
+        [ ] browse commands on HiveDashboard.AgentInspector
+        [ ] submit command as goal
+        [ ] autoconfigure goal
+        [ ] edit/resubmit goal
+        [ ] browse all goals on HiveDashboard.AgentInspector
+        [ ] filter/sort goals on HiveDashboard.AgentInspector
 - [ ] Peer to Peer cloud: hive_daemon
     - [x] hive_agency: factor shared code out of hive_cli
     - [x] class Config: represents initial, partial, proposed, corrected, validated, completed variable state for each Goal
@@ -79,11 +95,20 @@ Features:
     - [ ] hive_agency: static authorization (authority, email, capability, lifetime) in permissions.xml
     - [ ] hive_agency: static neighborhood in neighborhood.xml
     - [ ] hive_agency: cache authenticated sessions
-- [ ] Forward Path: Reconfigure & Resume Interrupted Goals
+- [ ] Resilient Forward Recovery Path: Suspending, Reconfiguring, and Resume Interrupted Goals
+    - [ ] failing methods cause goal to be suspended
+    - [ ] browse suspended goals on hive dashboard
+    - [ ] edit/continue/cancel suspended goal
+    - [ ] optional manual correction method for suspended goal
+    - [ ] optional automated method for suspended goal
+    - [ ] local persistent state backend for agent, goal, solver state
+    - [ ] resuming agency operation on restart
+    - [ ] state persistence backend
 - [ ] Emulating & Integrating POSIX make with Hive
-- [ ] Emulating & Integrating Maven with Hive
+- [ ] Emulating & Integrating Apache Maven with Hive
 - [ ] Emulating & Integrating npm with Hive
 - [ ] Emulating & Integrating Jenkins with Hive
+- [ ] Emulating & Integrating cron with Hive
 - [ ] Emulating & Integrating Terraform.io
 - [ ] Emulating & Integrating Docker
 - [ ] Production Delivery modes

@@ -1,12 +1,35 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <hive name="CassandraExperiment">
     <state>
-        <struct name="RecommendedEC2ConfigForDSEGDemo" type="EC2ClusterConfiguration">
+        <struct name="RecommendedEC2ConfigForDSEGDemo">
             <describe locale="en-US">The recommended cluster configuration in EC2 for a DSEG development or demo exercise</describe>
             <referenceDoc><url>https://docs.google.com/document/d/1IWGEkeJQy82lFBZhXm0CgS5wUO5oHqq3AWv4y3XwcGw/edit#heading=h.30j0zll</url></referenceDoc>
-            <variable name="numNodes" type="int">6</variable>
-            <variable name="nodeType" type="string">m3.large</variable>
-            <variable name="image" type="string">ami-9be6f38c</variable>
+            <struct name="analyticNodes" type="EC2ClusterConfiguration">
+                <variable name="numNodes" type="int">6</variable>
+                <variable name="image" type="string">ami-f7290c92</variable>
+                <variable name="instanceType" type="string">m4.large</variable>
+                <variable name="instancePrefix" type="string">ANode</variable>
+                <variable name="region" type="string">us-east-2</variable>
+                <variable name="networkAdapterName" type="string">enet0</variable>
+                <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+            </struct>
+            <struct name="transactionalNodes" type="EC2ClusterConfiguration">
+                <variable name="numNodes" type="int">6</variable>
+                <variable name="image" type="string">ami-f7290c92</variable>
+                <variable name="instanceType" type="string">m4.large</variable>
+                <variable name="instancePrefix" type="string">TNode</variable>
+                <variable name="region" type="string">us-east-2</variable>
+                <variable name="networkAdapterName" type="string">enet0</variable>
+                <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+            </struct>
+            <struct name="opsNode" type="EC2ClusterConfiguration">
+                <variable name="numNodes" type="int">1</variable>
+                <variable name="image" type="string">ami-f7290c92</variable>
+                <variable name="instanceType" type="string">m4.large</variable>
+                <variable name="instancePrefix" type="string">OpsNode</variable>
+                <variable name="region" type="string">us-east-2</variable>
+                <variable name="networkAdapterName" type="string">enet0</variable>
+                <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+            </struct>
         </struct>
         <struct name="i-02e3afedc1a92b410" type="EC2Node">
             <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
@@ -290,6 +313,21 @@ gpgcheck=0
             </shell>
         </do>
     </method>
+    <goalProto name="installToolViaPIP" symbol="goal">
+        <describe locale="en-US">Ensure that <get>goal.toolName</get> is installed via Mac OS X Homebrew</describe>
+        <variable name="toolName" type="programName"/>
+        <post><op name="isZero"><shell value="returnCode"><send name="command">pip show <get>goal.toolName</get></send></shell></op></post>
+    </goalProto>
+    <method name="installToolViaPIP" targetGoalType="installToolViaPIP" symbol="goal">
+        <describe locale="en-US">using pip</describe>
+        <referenceDoc><url>http://brew.sh</url></referenceDoc>
+        <do>
+            <shell name="doShell">
+                <label>install</label>
+                <send name="command" onFail="stop">pip install <get>goal.toolName</get></send>
+            </shell>
+        </do>
+    </method>
     <goalProto name="installEC2CLITools" symbol="goal">
         <describe locale="en-US">Ensure host has Amazon EC2 command line API installed</describe>
         <post><fileTest type="exists">ec2</fileTest></post>
@@ -333,22 +371,68 @@ gpgcheck=0
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
         <variable name="config" type="EC2ClusterConfiguration"/>
         <variable name="credentials" type="EC2Credentials"/>
+        <variable name="cluster" type="EC2Cluster"/>
+        <variable name="instances" type="EC2Instances"/>
         <pre><defined><get>goal.config</get></defined></pre>
         <pre><defined><get>goal.credentials</get></defined></pre>
     </goalProto>
     <method name="ProvisionEC2Cluster" symbol="goal" targetGoalType="ProvisionEC2Cluster">
+        <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+        <pre><goalCompleted name="installEC2CLITools"/></pre>
+        <pre><goalCompleted name="installAnyJava"/></pre>
+        <do><goalCompleted name="ProvisionEC2Group">
+            <variable name="config" type="EC2ClusterConfiguration"><get>goal.config.analyticNodes</get></variable>
+            <variable name="credentials"><get>goal.credentials</get></variable>
+            <variable name="instances"><get>goal.instances</get></variable>
+        </goalCompleted></do>
+        <do><goalCompleted name="ProvisionEC2Group">
+            <variable name="config" type="EC2ClusterConfiguration"><get>goal.config.transactionalNodes</get></variable>
+            <variable name="credentials"><get>goal.credentials</get></variable>
+            <variable name="instances"><get>goal.instances</get></variable>
+        </goalCompleted></do>
+        <do><goalCompleted name="ProvisionEC2Group">
+            <variable name="config" type="EC2ClusterConfiguration"><get>goal.config.opsNode</get></variable>
+            <variable name="credentials"><get>goal.credentials</get></variable>
+            <variable name="instances"><get>goal.instances</get></variable>
+        </goalCompleted></do>
+    </method>
+    <goalProto name="ProvisionEC2Group" symbol="goal">
+        <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
+        <variable name="config" type="EC2ClusterConfiguration"/>
+        <variable name="credentials" type="EC2Credentials"/>
+        <variable name="instances" type="EC2Instances"/>
+        <pre><defined><get>goal.config</get></defined></pre>
+        <pre><defined><get>goal.credentials</get></defined></pre>
+    </goalProto>
+    <method name="ProvisionEC2Group" symbol="goal" targetGoalType="ProvisionEC2Group">
+        <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
         <pre><goalCompleted name="installEC2CLITools"/></pre>
         <pre><goalCompleted name="installAnyJava"/></pre>
         <do>
-            <repeat name="instances">
-                <count><get>goal.config.numNodes</get></count>
+            <python>
+                <code>
+import boto3
+#rds = boto3.setup_default_session(region_name='<get>goal.config.region</get>')
+botoSession = boto3.session.Session(region_name='<get>goal.config.region</get>',aws_access_key_id='<get>goal.credentials.accessKey</get>',aws_secret_access_key='<get>goal.credentials.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+instances = botoResource.create_instances(InstanceType='<get>goal.config.instanceType</get>',ImageId='<get>goal.config.image</get>', MinCount=<get>goal.config.numNodes</get>, MaxCount=<get>goal.config.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>goal.config.securityGroupId</get>'],AssociatePublicIpAddress=True)])
+<set>goal.instances</set> = []
+for instance in instances:
+    instance.wait_until_running()
+    instance.load()
+    <set>goal.instances</set>.append(instance)
+                </code>
+            </python>
+            <find symbol="instance">
+                <in><get>goal.instances</get></in>
                 <do>
-                    <shell>
-                        <label>allocate</label>
-                        <send name="command" onFail="stop">$EC2_HOME/bin/ec2-run-instances <get>goal.config.image</get> -t <get>goal.config.nodeType</get> --associate-public-ip-address true -O <get>goal.credentials.accessKey</get> -W <get>goal.credentials.secretKey</get></send>
-                    </shell>
+                    <python>
+                        <code>
+print 'DEBUG: instance named %s public %s private %s' % (<set>instance</set>.id,<set>instance</set>.public_ip_address,<set>instance</set>.private_ip_address)
+                        </code>
+                    </python>
                 </do>
-            </repeat>
+            </find>                
         </do>
     </method>
     <goalProto name="installDSEOpsCenter" symbol="goal">
