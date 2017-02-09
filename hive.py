@@ -32,6 +32,9 @@ import copy
 import jsonpickle
 import re
 
+def toBool(rvalue):
+    return rvalue != False and rvalue != 0 and rvalue != 'false' and rvalue != 'False' and rvalue != 'FALSE'
+
 class LineNumberingParser(ElementTree.XMLParser):
     def __init__(self,file_name):
         self._file_name = file_name
@@ -235,6 +238,21 @@ class Solver:
     def verboseMode(self,level):
         return self.args.verbose != None and self.args.verbose >= level        
 
+    def goalsMode(self,level):
+        return self.args.goals != None and self.args.goals >= level        
+
+    def echoMode(self):
+        return self.args.echo != None
+
+    def linesMode(self):
+        return self.args.lines != None
+
+    def initialMode(self):
+        return self.args.initial != None
+
+    def finalMode(self):
+        return self.args.final != None
+
     def readFile(self,programFile,mandatory=True):
         actualPaths = glob.glob(os.path.expanduser(programFile))
         if len(actualPaths) == 0:
@@ -259,10 +277,10 @@ class Solver:
         for element in xmlDefinitions.findall('*'):
             if 'name' in element.attrib:
                 self.addDefinition(element)
-            if element.tag == 'variable' or element.tag == 'list' or element.tag == 'struct':
-                self.addStateDef(element)
             else:
                 self.createError('%s:%d: attribute name must be present on all top-level XML nodes, which are considered to be Hive definitions' % (element._file_name,element._start_line_number))
+            if element.tag == 'variable' or element.tag == 'list' or element.tag == 'struct':
+                self.addStateDef(element)
 
     def addDefinition(self,xmlDefinition):
         typeName = xmlDefinition.tag
@@ -317,9 +335,20 @@ class Solver:
     def beginAgent(self):
         agent = Agent(self);
         self.agents.append(agent)
+
+        if self.args.initial:
+            print 'BEGIN INITIAL STATE OF AGENT %s' % agent.name
+            agent.state.details()
+            print 'END   INITIAL STATE OF AGENT %s' % agent.name
+
         return agent
 
     def endAgent(self,agent):
+        if self.args.final:
+            print 'BEGIN FINAL STATE OF AGENT %s' % agent.name
+            agent.state.details()
+            print 'END   FINAL STATE OF AGENT %s' % agent.name
+
         self.agents.remove(agent)
 
 class Agent:
@@ -330,6 +359,7 @@ class Agent:
         self.statementStack = []
         self.name = solver.allocateAgentName()
         self.state = Config(self.name,'State of Agent '+self.name,solver)
+        self.state.root.setupStruct()        
         self.goalIndex = dict()
 
     def allocateGoalName(self,prefix):
@@ -353,13 +383,30 @@ class Agent:
     def verboseMode(self,level):
         return self.solver.args.verbose != None and self.solver.args.verbose >= level
 
+    def goalsMode(self,level):
+        return self.solver.args.goals != None and self.solver.args.goals >= level
+
+    def echoMode(self):
+        return self.solver.args.echo != None
+
+    def linesMode(self):
+        return self.solver.args.lines != None
+
+    def initialMode(self):
+        return self.solver.args.initial != None
+
+    def finalMode(self):
+        return self.solver.args.final != None
+
     def interpolateInner(self,context,elt,errHandler):
         cmd = ''
         if elt.text:
             cmd += elt.text
         for child in elt:
-            if(ElementTree.iselement(child)):
-                sub = Evaluator(self,context)
+            if child.tag == 'describe' or child.tag == 'label':
+                pass
+            elif ElementTree.iselement(child):
+                sub = Evaluator(self,context,None)
                 sub.setXML(child)
                 sub.evaluate()
                 if sub.isSuccess():
@@ -378,28 +425,36 @@ class Agent:
 
     def beginStatement(self,statement,context):
         self.statementStack.append(statement)
+        sourceLoc = ''
+        if self.solver.linesMode():
+            sourceLoc = '%s:%d ' % (statement._file_name,statement._start_line_number)
+
         if self.solver.args.narrate:
             descriptions = statement.findall('describe')
             if len(descriptions) > 0:
-                evalResult = Evaluator(self,context)
+                evalResult = Evaluator(self,context,None)
                 evalResult.setXML(descriptions[0])
                 evalResult.evaluate()
                 name = ''
                 if 'name' in statement.attrib:
                     name = '%s : ' % statement.get('name')
-                print "BEGIN # %s%s" % (name,evalResult.value)
+                print "# BEGIN %s%s%s" % (sourceLoc,name,evalResult.value)
 
     def endStatement(self,statement,context):
+        sourceLoc = ''
+        if self.solver.linesMode():
+            sourceLoc = '%s:%d ' % (statement._file_name,statement._start_line_number)
+
         if self.solver.args.narrate:
             descriptions = statement.findall('describe')
             if len(descriptions) > 0:
-                evalResult = Evaluator(self,context)
+                evalResult = Evaluator(self,context,None)
                 evalResult.setXML(descriptions[0])
                 evalResult.evaluate()
                 name = ''
                 if 'name' in statement.attrib:
                     name = '%s : ' % statement.get('name')
-                print "END   # %s%s" % (name,evalResult.value)
+                print "# END   %s%s%s" % (sourceLoc,name,evalResult.value)
         self.statementStack.pop()
 
     def findGoal(self,goalName,goalConfig):
@@ -422,6 +477,9 @@ class Agent:
 
     def addGoal(self,goal):
         self.goals.append(goal)
+        myNode = self.state.root.lookupTermList(True,[goal.name],self)
+        otherNode = goal.context.root.lookupTermList(False,['goal'],self)
+        myNode.copyFrom(otherNode)
 
     def solve(self):
         for goal in self.goals:
@@ -483,12 +541,13 @@ class EvalOutcomes:
             return EvalOutcomes().setFalse()
 
 class Evaluator:
-    def __init__(self,agent,context):
+    def __init__(self,agent,context,pursue):
         self.agent = agent
         self.context=context
         self.errors = []
         self.outcome = EvalOutcomes().setTrue()
         self.tail = ''
+        self.pursue = pursue
 
     def setXML(self,xmlExpr):
         self.expr=xmlExpr
@@ -541,11 +600,11 @@ class Evaluator:
     def doUnaryOperator(self,op,a):
         self.outcome = a.outcome
         if(op == 'isZero'):
-            self.value = a.getRvalue() == 0
+            self.value = int(a.getRvalue()) == 0
         elif(op == 'isNotZero'):
-            self.value = a.getRvalue() != 0
+            self.value = int(a.getRvalue()) != 0
         elif(op == 'not'):
-            self.value = not a.getRvalue()
+            self.value = not toBool(a.getRvalue())
         else:
             self.createError('Unrecognized operator: '+op)
 
@@ -572,7 +631,7 @@ class Evaluator:
     def doStruct(self,xml):
         self.value = dict()
         for child in xml:
-            subResult = Evaluator(self.agent,self.context)
+            subResult = Evaluator(self.agent,self.context,self.pursue)
             subResult.setXML(child)
             if 'name' not in subResult:
                 subResult.createError('XML child of structure must have attribute \'name\'')
@@ -603,15 +662,16 @@ class Evaluator:
     def doXML(self):
         childResults = []
         if self.expr.text:
-            sub = Evaluator(self.agent,self.context)
+            sub = Evaluator(self.agent,self.context,self.pursue)
             sub.setString(self.expr.text)
             sub.doText()
             childResults.append(sub)
         for child in self.expr:
-            sub = Evaluator(self.agent,self.context)
-            sub.setXML(child)
-            sub.evaluate()
-            childResults.append(sub)
+            if child.tag != 'describe' and child.tag != 'label':
+                sub = Evaluator(self.agent,self.context,self.pursue)
+                sub.setXML(child)
+                sub.evaluate()
+                childResults.append(sub)
         if self.expr.tail:
             self.tail = self.expr.tail
 
@@ -662,8 +722,7 @@ class Evaluator:
                 self.createError('<'+self.expr.tag+'> must always have a child expression')
             else:
                 interpreted = True
-                rvalue = childResults[0].getRvalue()
-                self.setValue(rvalue != False and rvalue != 0 and rvalue != 'false' and rvalue != 'False' and rvalue != 'FALSE')
+                self.setValue(toBool(childResults[0].getRvalue()))
                 self.outcome = self.outcome and childResults[0].outcome
         elif self.expr.tag == 'string' or self.expr.tag == 'describe' or self.expr.tag == 'code':
             if(len(childResults) == 0):
@@ -683,7 +742,8 @@ class Evaluator:
         elif self.expr.tag == 'variable':
 #            self.doVariable(self.expr)
             if len(childResults) == 0:
-                self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
+                pass
+                #self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
             elif not childResults[0].isSuccess():
                 self.addError(childResults[0].errors[0])
             else:
@@ -692,7 +752,8 @@ class Evaluator:
         elif self.expr.tag == 'list':
 #            self.doVariable(self.expr)
             if len(childResults) == 0:
-                self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
+                pass
+                #self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
             elif(childResults[0].getLvalue() != None):
                 interpreted = True
                 self.setValue(childResults[0].getLvalue())
@@ -722,7 +783,10 @@ class Evaluator:
                     for cmd in cmdList:
                         if self.agent.verboseMode(1):
                             print 'BEGIN shell command: %s' % cmd
-                        lastReturnCode = pexpect.run(cmd,withexitstatus=1)
+                        timeout = None
+                        if 'timeout' in child.attrib:
+                            timeout = child.get('timeout')
+                        lastReturnCode = pexpect.run(cmd,withexitstatus=1,timeout=timeout)
                         if self.agent.verboseMode(1):
                             print "END   shell return code %d command: %s" % (lastReturnCode[1],cmd)                
             valueType = 'isZero'
@@ -755,12 +819,17 @@ class Evaluator:
                 if len(childResults) != 1:
                     self.createError('python tag must always have a path as its only child')
                 else:
-                    exec('self.value = %s(\'%s\')' % (funcName,str(childResults[0].getRvalue())))
+                    cmd = 'self.value = %s(\'%s\')' % (funcName,str(childResults[0].getRvalue()))
+                    if self.agent.echoMode():
+                        print "BEGIN <python><code>\n%s\n</code></python>" % cmd
+                    exec(cmd)
+                    if self.agent.echoMode():
+                        print "END   <python><code>\n%s\n</code></python>" % cmd
                     interpreted = True
             elif len(codeBlocks) > 0:
 #                print 'DEBUG: %d code blocks' % len(codeBlocks)
                 for codeBlock in codeBlocks:
-                    sub = Evaluator(self.agent,self.context)
+                    sub = Evaluator(self.agent,self.context,self.pursue)
                     sub.setXML(codeBlock)
                     sub.evaluate()
                     if not sub.isSuccess():
@@ -768,12 +837,14 @@ class Evaluator:
                         for error in sub.errors:
                             self.errors.append(error)
                     else:
-                        if self.agent.verboseMode(1):
-                            print 'EXECUTING python commands:'
-                            print sub.getRvalue()
+                        cmd = sub.getRvalue()
                         localContext = dict(locals())
                         self.context.root.configureMapping(localContext)
-                        exec(sub.getRvalue(),globals(),localContext)
+                        if self.agent.echoMode():
+                            print "BEGIN <python><code>\n%s\n</code></python>" % cmd
+                        exec(cmd,globals(),localContext)
+                        if self.agent.echoMode():
+                            print "END   <python><code>\n%s\n</code></python>" % cmd
                         self.setValue(True)
                         interpreted = True
 #                code.interact(local=locals())
@@ -786,6 +857,15 @@ class Evaluator:
             if (foundGoal != None):
                 self.value = True
                 self.outcome = EvalOutcomes().setTrue()
+            elif self.pursue != None:
+                subgoal = Goal(self.agent)
+                subgoal.cfgSubGoal(goalName,self.pursue,self.context,self.expr,self.agent.solver.remainingArgString)
+                subgoal.pursue()
+                if not subgoal.isSuccess():
+                    self.value = False
+                else:
+                    self.value = True
+                    subgoal.context.root.returnStateChildren(self.context.root,stmt)
             else:
                 self.value = False
                 self.outcome = EvalOutcomes().setPossible()
@@ -821,6 +901,8 @@ class Goal:
         self.protoName = name
         self.name = self.agent.allocateGoalName(name)
         self.context = self.agent.defaultEvalContext(name,'Evaluation context for goal '+self.name)
+        goalNode = self.context.root.lookupTermList(True,['goal'],None)
+        goalNode.setupStruct()
         self.args = remainingArgString
 
     def cfgSubGoal(self,name,parent,argContext,argXML,remainingArgString):
@@ -855,8 +937,8 @@ class Goal:
                 self.createError('Expected goal assignments but instead found command line argument: '+assignment)
             else:
 #                print 'DEBUG: parsed command-line assignment of '+tokens[0]+' := '+tokens[1]
-                lhs = self.context.root.lookupTermList(False,tokens[0].split('.'),Evaluator(self.agent,self.context).setString(tokens[1]))
-                rhs = Evaluator(self.agent,self.context)
+                lhs = self.context.root.lookupTermList(False,tokens[0].split('.'),Evaluator(self.agent,self.context,None).setString(tokens[1]))
+                rhs = Evaluator(self.agent,self.context,None)
                 rhs.setString(tokens[1])
                 rhs.evaluate()
                 if lhs == None:
@@ -937,11 +1019,11 @@ class Goal:
         return result
 
     def evalCondition(self,condElement):
-        evalResult = Evaluator(self.agent,self.context)
+        evalResult = Evaluator(self.agent,self.context,None)
         evalResult.setXML(condElement)
         evalResult.evaluate()
         if(evalResult.getOutcome().isTrue()):
-            return EvalOutcomes().setTrue() if bool(evalResult.getRvalue()) else EvalOutcomes().setFalse()
+            return EvalOutcomes().setTrue() if toBool(evalResult.getRvalue()) else EvalOutcomes().setFalse()
         else:
             return evalResult.getOutcome()
 
@@ -971,16 +1053,17 @@ class Goal:
         return result
 
     def checkExpr(self,preCheck):
-        checkResult = Evaluator(self.agent,self.context)
+        checkResult = Evaluator(self.agent,self.context,None)
         checkResult.setXML(preCheck[0])
         checkResult.evaluate()
         if not checkResult.isSuccess():
-            if self.agent.verboseMode(1):
+            if self.agent.verboseMode(1) and len(checkResult.errors) > 0:
                 print "ERROR: While checking <%s>," % preCheck.tag
                 for error in checkResult.errors:
                     print "       "+error                        
-            self.addError(checkResult.errors)
-        elif not checkResult.value:
+            for error in checkResult.errors:
+                self.addError(error)
+        elif not toBool(checkResult.getRvalue()):
             self.createErrorAt(preCheck,'Pre check failed '+ElementTree.tostring(preCheck))
 
     def subsumedBy(self, other):
@@ -998,19 +1081,21 @@ class Goal:
 
     def toString(self):
         result = ''
-        result += '{ name: '+self.name
+        result += self.name
+        result += '('
+        result += self.context.toString()
+        result += ')'
         if self.proto is not None:
-            result += ', proto: '+self.proto.get('name')
+            result += ' %s:%d' % (self.proto._file_name,self.proto._start_line_number)
         if self.method is not None:
-            result += ', method: '+self.method.get('name')
-        result += ', context: '+self.context.toString()
-        result += ' }'
+            result += ' %s:%d' % (self.method._file_name,self.method._start_line_number)
         return result
 
     def pursue(self):
-        if self.agent.verboseMode(1):
-            print 'BEGIN Pursuing this goal: '+self.toString()
-            print self.context.details()
+        if self.agent.goalsMode(1):
+            print '# BEGIN Pursuing this goal: '+self.toString()
+            if self.agent.verboseMode(1):
+                print self.context.details()
 
         if not self.proto and self.isSuccess():
             if self.agent.verboseMode(1):
@@ -1031,7 +1116,7 @@ class Goal:
         if len(posts) > 0:
             canSkip = True
             for post in posts:                
-                checkPostBefore = Evaluator(self.agent,self.context)
+                checkPostBefore = Evaluator(self.agent,self.context,None)
                 checkPostBefore.setXML(post[0])
                 checkPostBefore.evaluate()
                 canSkip = canSkip and checkPostBefore.value
@@ -1083,11 +1168,11 @@ class Goal:
                 self.execute(stmt)
             self.agent.endStatement(self.method,self.context)
 
-        if self.agent.verboseMode(1):
+        if self.agent.goalsMode(1):
             if not self.isSuccess():
                 for error in self.errors:
-                    print 'ERROR: '+error
-            print 'END   Pursuing this goal: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+')'
+                    print 'Goal failed b/c of error: '+error
+            print '# END   Pursuing this goal: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+')'
         if self.proto is not None:
             self.agent.endStatement(self.proto,self.context)
 
@@ -1099,7 +1184,8 @@ class Goal:
         context = contextPre
         if 'name' in stmt.attrib:
             context = context.lookupTermList(True,[stmt.get('name')],self)
-            context.setupStruct()
+            if stmt.tag == 'struct' or stmt.tag == 'goalCompleted' or stmt.tag == 'goalProto':
+                context.setupStruct()
             if self.agent.verboseMode(1):
                 print 'ENTER CONTEXT '+context.getPath('.')
         if stmt.tag == 'pre':
@@ -1112,7 +1198,7 @@ class Goal:
             for child in stmt:
                 if child.tag == 'in':
                     grandchildren = child.findall('*')
-                    evaluator = Evaluator(self.agent,self.context)
+                    evaluator = Evaluator(self.agent,self.context,self)
                     evaluator.setXML(grandchildren[0])
                     evaluator.evaluate()
                     if not evaluator.isSuccess():
@@ -1140,11 +1226,14 @@ class Goal:
             for child in stmt:
                 if self.isSuccess():
                     self.execute_r(context,child)
+                else:
+                    print 'DEBUG: find/do is skipping statement at %s:%d' % (child._file_name,child._start_line_number)
+                    print '\n'.join(self.errors)
         elif stmt.tag == 'repeat':
             count = None
             for child in stmt:
                 if child.tag == 'count':
-                    count = Evaluator(self.agent,self.context)
+                    count = Evaluator(self.agent,self.context,self)
                     count.setXML(child[0])
                     count.evaluate()
 
@@ -1188,8 +1277,12 @@ class Goal:
                         if self.hasErrors():
                             print "ERRORS %s" % cmd
                         elif self.agent.solver.args.execute:
-                            print "SYSTEM %s" % cmd
-                            lastCommand = pexpect.run(cmd,withexitstatus=1)
+                            if self.agent.echoMode():
+                                print "BEGIN <shell><send>%s</send></shell>" % cmd
+                            timeout = None
+                            if 'timeout' in child.attrib:
+                                timeout = child.get('timeout')
+                            lastCommand = pexpect.run(cmd,withexitstatus=1,timeout=timeout)
                             if self.agent.verboseMode(1):
                                 print lastCommand[0]
                             if 'name' in child.attrib:
@@ -1205,6 +1298,8 @@ class Goal:
                                 lines = '\n'.split(lastCommand[0])
                                 for line in lines:
                                     self.createErrorAt(child,line)
+                            if self.agent.echoMode():
+                                print "END   <shell><send>%s</send></shell>" % cmd
                         else:
                             print "PLAN  %s" % cmd
                 elif(child.tag == 'receive'):
@@ -1230,24 +1325,26 @@ class Goal:
             print >>file, self.agent.interpolateInner(self.context,stmt,self)
             file.flush()
         elif stmt.tag == 'op' or stmt.tag == 'get' or stmt.tag == 'python':
-            evaluator = Evaluator(self.agent,self.context)
+            evaluator = Evaluator(self.agent,self.context,None)
             evaluator.setXML(stmt)
             evaluator.evaluate()
             if not evaluator.isSuccess():
                 self.createErrorAt(stmt,'Expected hive statement or expression')
                 for error in evaluator.errors:
                     self.errors.append(error)
-            elif bool(evaluator.getRvalue()) != True:
+            elif toBool(evaluator.getRvalue()) != True:
                 self.createErrorAt(stmt,'Statement failed to execute or expression returned zero/False')                
         elif stmt.tag == 'goalCompleted':
             goalName = stmt.get('name')
-            goalConfig = Config(goalName,'Subgoal configuration',self.agent.solver)
-            goalConfig.setup('goal',stmt)
+#            goalConfig = Config(goalName,'Subgoal configuration',self.agent.solver)
+#            goalConfig.setup('goal',stmt)
             subgoal = Goal(self.agent)
             subgoal.cfgSubGoal(goalName,self,self.context,stmt,self.agent.solver.remainingArgString)
             subgoal.pursue()
             if not subgoal.isSuccess():
-                result = False            
+                result = False
+            else:
+                subgoal.context.root.returnStateChildren(self.context.root,stmt)
         else:
             if self.agent.verboseMode(1):
                 print 'SKIP tag %s which is neither a statement nor an expression' % stmt.tag
@@ -1354,11 +1451,24 @@ class ConfigNode:
         else:
             return [].__iter__()
 
+    def __str__(self):
+        return self.getPath('.')
+
+    def reset(self):
+        self.selected = None
+        self.assigned = None
+        self.fields = None
+        self.elements = None
+
     def configureMapping(self,mapping):
         for key,value in self.fields.iteritems():
             mapping[key] = ConfigWrap(value)
 
     def copyFrom(self,other):
+        self.assigned = other
+        self.copyFrom_r(other)
+
+    def copyFrom_r(self,other):
 #        print 'DEBUG: BEGIN ConfigNode.copyFrom('+self.getPath('.')+' <= '+other.getPath('.')+')'
         for otherVal in other.values:
             self.values.append(otherVal)
@@ -1381,19 +1491,23 @@ class ConfigNode:
             self.typeName = other.typeName
  #       print 'DEBUG: END   ConfigNode.copyFrom('+self.getPath('.')+' <= '+other.getPath('.')+')'
 
-    def details(self):
+    def details(self,recursive=True):
         result = ''
         if not isinstance(self.getValue(),ConfigNode):
             result += '%s = %s (%s)\n' % (self.getPath('.'),self.getValue(),self.typeName if self.typeName != None else '?')
-        if self.fields != None:
-            for key,field in self.fields.iteritems():
-                result += field.details()
-        if self.elements != None:
-            for item in self.elements:
-                result += item.details()
+        if recursive:
+            if self.fields != None:
+                for key,field in self.fields.iteritems():
+                    result += field.details()
+            if self.elements != None:
+                for item in self.elements:
+                    result += item.details()
         return result
 
+
     def setupStruct(self):
+        if self.getPath('.') == 'setupCassandraNode.goal.dataStaxYumRepo':
+            raise RuntimeError('GOTCHA')
         if self.fields == None:
             self.fields = dict()
 
@@ -1429,21 +1543,40 @@ class ConfigNode:
         elif xml.tag == 'variable' or xml.tag == 'list':
             if xml.tag == 'list':
                 self.setupList()
-            result = Evaluator(solver,context)
-            result.setXML(xml)
-            result.evaluate()
-            if not result.isSuccess():
-                print 'Unable to interpret this XML expression: '+result.errors[0]
-            elif result.getLvalue() != None:
-                self.copyFrom(result.getLvalue())
-            elif result.getRvalue() != None:
-                self.setValue(result.getRvalue())
+            if len(xml) > 0 or xml.text:
+                result = Evaluator(solver,context,None)
+                result.setXML(xml)
+                result.evaluate()
+                if not result.isSuccess():
+                    print 'Unable to interpret this XML expression: '+result.errors[0]
+                elif result.getLvalue() != None:
+                    self.copyFrom(result.getLvalue())
+                elif result.getRvalue() != None:
+                    self.setValue(result.getRvalue())
 
         if 'type' in xml.attrib:
             self.typeName = xml.get('type')
 
         if solver.args.verbose > 0:
             print "END   initState(%s) at %s:%d" % (self.getPath('.'),xml._file_name,xml._start_line_number)
+
+    def returnStateChildren(self,otherNode,xml):
+        if self.rootConfig.solver.verboseMode(2):
+            print "BEGIN returnState(%s,%s) at %s:%d" % (self.getPath('.'),otherNode.getPath('.'),xml._file_name,xml._start_line_number)
+
+        for myChild in xml:
+            myChildName = myChild.get('name')
+            if myChildName != None:
+                for otherChild in myChild:
+                    if otherChild.tag == 'get' or otherChild.tag == 'set':
+                        myNode = self.lookupTermList(False,['goal',myChildName],self.rootConfig.solver)
+                        otherNode2 = otherNode.lookupString(False,otherChild.text,self.rootConfig.solver)
+                        otherNode2.reset()
+                        otherNode2.copyFrom(myNode)
+
+        if self.rootConfig.solver.verboseMode(2):
+            print "END   returnState(%s,%s) at %s:%d" % (self.getPath('.'),otherNode.getPath('.'),xml._file_name,xml._start_line_number)
+
 
     def getAttr(self,attr):
         if self.fields == None:
@@ -1476,7 +1609,6 @@ class ConfigNode:
             if self.rootConfig.solver.args.verbose > 0:
                 print 'ConfigNode.setValue copies '+value.getPath('.')+' to '+self.getPath('.')
             self.copyFrom(value)
-            self.assigned = value
         else:
             if self.rootConfig.solver.args.verbose > 0:
                 print 'ConfigNode.setValue assigns '+self.getPath('.')+' to '+str(value)
@@ -1512,7 +1644,7 @@ class ConfigNode:
 
     def lookupTermList(self,create,pathTerms,errHandler):
         result = None
-        if self.rootConfig.solver.verboseMode(1):
+        if self.rootConfig.solver.verboseMode(2):
             print 'BEGIN lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
         if(len(pathTerms) == 0):
             result = self
@@ -1520,6 +1652,8 @@ class ConfigNode:
         elif pathTerms[0] == '':
             if errHandler != None: errHandler.createError('empty field name at %s' % self.getPath('.'))
         elif self.fields == None:
+            if len(pathTerms) == 1 and self.selected != None and isinstance(self.selected,object):
+                return getattr(self.selected,pathTerms[0])
             if errHandler != None: errHandler.createError('%s is not configured as struct with any fields while looking for field %s' % (self.getPath('.'),pathTerms[0]))
         else:
             if pathTerms[0] not in self.fields:
@@ -1540,8 +1674,9 @@ class ConfigNode:
 
 #            print 'DEBUG: found field named '+pathTerms[0]
             result = self.fields[pathTerms[0]].lookupTermList(create,pathTerms[1:],errHandler)
-        if self.rootConfig.solver.verboseMode(1):
+        if self.rootConfig.solver.verboseMode(2):
             print 'END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
+            print self.details(False)
         return result
 
     def reconfigure(self,stateConfig,prefixNode):
@@ -1580,6 +1715,22 @@ class ConfigNode:
             for element in self.elements:
                 element.tallyOptions(options)
 
+    def tallyAssigns(self,options):
+        if self.selected != None:
+            options[self.getPath('.',absolute=False)] = self.selected
+        elif self.assigned != None:
+            options[self.getPath('.',absolute=False)] = self.assigned
+        elif len(self.values) > 0:
+            pass
+
+        if self.assigned == None:
+            if self.fields != None:
+                for key,field in self.fields.iteritems():
+                    field.tallyAssigns(options)
+            if self.elements != None:
+                for element in self.elements:
+                    element.tallyAssigns(options)
+
     def isDefined(self):
         return self.selected != None or self.elements != None or self.fields != None or self.assigned != None
 
@@ -1594,7 +1745,23 @@ class Config:
 #        print 'DEBUG: initial state of %s is:\n%s' % (self.desc,self.details())
 
     def toString(self):
-        return self.desc
+        goalNode = self.root.lookupTermList(False,['goal'],None)
+        if goalNode == None:
+            return ''
+
+        options = dict()
+        goalNode.tallyAssigns(options)
+        count = 0
+        result = ''
+        for path,value in options.iteritems():
+            if count != 0:
+                result += ','
+            lines = str(value).split('\n')
+            if len(lines) == 0:
+                lines = ['']
+            result += '%s=%s' % (path,lines[0])
+            count += 1
+        return result
 
     def details(self):
         return self.root.details()

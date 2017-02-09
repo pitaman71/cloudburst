@@ -11,7 +11,12 @@ parser.add_argument('--list',action='store_true',help='List all Hive definitions
 parser.add_argument('--plan',nargs='?',help='Compute a plan of action that would be taken to execute a goal without actually running it (dry run).')
 parser.add_argument('--execute',nargs='?',help='Execute a goal')
 parser.add_argument('--verbose','-v',action='count',help='Add an extremely detailed debug trace to stdout')
-parser.add_argument('--narrate','-n',action='count',help='Print easy-to-read single-line (concise) comments that describe the goals being executed and progress toward completing each')
+parser.add_argument('--narrate','-n',action='count',help='Print narrative (concise, easy-to-read, single-line) comments that describe the goals being executed and progress toward completing each')
+parser.add_argument('--goals','-g',action='count',help='Print single-line comments that describe the goals being executed including how they are configured')
+parser.add_argument('--echo','-e',action='count',help='Echo external commands (e.g. embedded code in shell, python) before and after execution')
+parser.add_argument('--lines','-l',action='count',help='Print hive program line numbers with all trace messages')
+parser.add_argument('--initial','-i',action='count',help='Print initial state of hive agency after loading programs')
+parser.add_argument('--final','-f',action='count',help='Print final state of hive agency after executing/solving goals')
 tup = parser.parse_known_args()
 solverArgs = tup[0]
 
@@ -39,6 +44,7 @@ if(solverArgs.plan or solverArgs.execute):
 
     solver.initialize()
     agent = solver.beginAgent()
+
     topGoal = agent.addTopGoalByName(goalName)    
     agent.solve()
 #    solver.terminate()

@@ -47,7 +47,7 @@ Features:
     - [x] ProvisionEC2Cluster recipe for procuring EC2 instance for Datastax cluster
     - [x] find/in/do task statements
     - [x] goalCompleted as an executable statement (spawned subgoal)
-    - [x] using <set> and <get> as lvalue and rvalue in <python><code> blocka
+    - [x] using <set> and <get> as lvalue and rvalue in <python><code> blocks
     - [ ] install and invoke hive agency on remote node
     - [ ] agent program and state exchange b/w participants
         - [ ] ConfigMonitor, ConfigUpdater python classes
@@ -81,6 +81,11 @@ Features:
         [ ] edit/resubmit goal
         [ ] browse all goals on HiveDashboard.AgentInspector
         [ ] filter/sort goals on HiveDashboard.AgentInspector
+- [ ] Plan and Graph (comparable to Terraform)
+    - [ ] 
+- [ ] Snapshots and Checkpoints
+    - [ ] Using cloud snapshots to accelerate authoring/debug of instance provisioning recipes
+    - [ ] Using Hive programs to construct Docker images
 - [ ] Peer to Peer cloud: hive_daemon
     - [x] hive_agency: factor shared code out of hive_cli
     - [x] class Config: represents initial, partial, proposed, corrected, validated, completed variable state for each Goal

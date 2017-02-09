@@ -1,8 +1,9 @@
 <hive name="CassandraExperiment">
     <struct name="RecommendedEC2ConfigForDSEGDemo">
+        <variable name="region" type="string">us-east-2</variable>
         <describe locale="en-US">The recommended cluster configuration in EC2 for a DSEG development or demo exercise</describe>
         <referenceDoc><url>https://docs.google.com/document/d/1IWGEkeJQy82lFBZhXm0CgS5wUO5oHqq3AWv4y3XwcGw/edit#heading=h.30j0zll</url></referenceDoc>
-        <struct name="analyticNodes" type="EC2ClusterConfiguration">
+        <struct name="analyticNodes" type="EC2GroupConfiguration">
             <variable name="numNodes" type="int">6</variable>
             <variable name="image" type="string">ami-f7290c92</variable>
             <variable name="instanceType" type="string">m4.large</variable>
@@ -10,8 +11,10 @@
             <variable name="region" type="string">us-east-2</variable>
             <variable name="networkAdapterName" type="string">enet0</variable>
             <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+            <variable name="isCassandraNode" type="boolean">True</variable>
+            <variable name="isOpsCenterNode" type="boolean">False</variable>
         </struct>
-        <struct name="transactionalNodes" type="EC2ClusterConfiguration">
+        <struct name="transactionalNodes" type="EC2GroupConfiguration">
             <variable name="numNodes" type="int">6</variable>
             <variable name="image" type="string">ami-f7290c92</variable>
             <variable name="instanceType" type="string">m4.large</variable>
@@ -19,8 +22,10 @@
             <variable name="region" type="string">us-east-2</variable>
             <variable name="networkAdapterName" type="string">enet0</variable>
             <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+            <variable name="isCassandraNode" type="boolean">True</variable>
+            <variable name="isOpsCenterNode" type="boolean">False</variable>
         </struct>
-        <struct name="opsNode" type="EC2ClusterConfiguration">
+        <struct name="opsNode" type="EC2GroupConfiguration">
             <variable name="numNodes" type="int">1</variable>
             <variable name="image" type="string">ami-f7290c92</variable>
             <variable name="instanceType" type="string">m4.large</variable>
@@ -28,6 +33,8 @@
             <variable name="region" type="string">us-east-2</variable>
             <variable name="networkAdapterName" type="string">enet0</variable>
             <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+            <variable name="isCassandraNode" type="boolean">False</variable>
+            <variable name="isOpsCenterNode" type="boolean">True</variable>
         </struct>
     </struct>
     <struct name="i-02e3afedc1a92b410" type="EC2Node">
@@ -36,7 +43,7 @@
         <struct name="credentials" type="SSHCredentials">
             <describe locale="en-US">SSH/TLS username and certificate</describe>
             <variable name="user" type="username">ec2-user</variable>
-            <struct name="certificate" type="SSLCertificate">
+            <struct name="privateKey" type="SSLCertificate">
                 <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
             </struct>
         </struct>
@@ -47,7 +54,7 @@
         <struct name="credentials" type="SSHCredentials">
             <describe locale="en-US">SSH/TLS username and certificate</describe>
             <variable name="user" type="username">ec2-user</variable>
-            <struct name="certificate" type="SSLCertificate">
+            <struct name="privateKey" type="SSLCertificate">
                 <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
             </struct>
         </struct>
@@ -56,7 +63,7 @@
         <struct name="credentials" type="SSHCredentials">
             <describe locale="en-US">SSH/TLS username and certificate</describe>
             <variable name="user" type="username">ubuntu</variable>
-            <struct name="certificate" type="SSLCertificate">
+            <struct name="privateKey" type="SSLCertificate">
                 <variable name="localFilePath" type="localFilePath">~/.ssh/expero-us-east-2.pem</variable>
             </struct>
         </struct>
@@ -96,44 +103,62 @@
     <goalProto name="setupCassandraNode" symbol="goal">
         <describe locale="en-US">Configure EC2 node to run the Datastax Enterprise Graph Example</describe>
         <variable name="node" type="EC2Node"/>
-        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
-        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.node.privateIP</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="startCassandraNode" symbol="goal">
         <describe locale="en-US">Start the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
-        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <variable name="isCassandraNode" type="boolean">True</variable>
+        <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
-        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.node.privateIP</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
+        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
+    </goalProto>
+    <goalProto name="startOpsCenterNode" symbol="goal">
+        <describe locale="en-US">Start the Datastax Enterprise Graph service</describe>
+        <variable name="node" type="EC2Node"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <variable name="isOpsCenterNode" type="boolean">True</variable>
+        <pre><defined><get>goal.sshCreds.user</get></defined></pre>
+        <pre><defined><get>goal.node.publicIP</get></defined></pre>
+        <pre><defined><get>goal.node.privateIP</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="stopCassandraNode" symbol="goal">
         <describe locale="en-US">Stop the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
-        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
-        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.node.privateIP</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="retireCassandraNode" symbol="goal">
         <describe locale="en-US">Dismantle EC2 node configuration</describe>
         <variable name="node" type="EC2Node"/>
-        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
-        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.node.privateIP</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
@@ -141,11 +166,12 @@
         <describe locale="en-US">Install (optional) DSEG Loader tool</describe>
         <variable name="workDir" type="localFilePath"/>
         <variable name="node" type="EC2Node"/>
-        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><defined><get>goal.ec2Creds.user</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
-        <pre><defined><get>goal.ec2Creds.certificate.localFilePath</get></defined></pre>
+        <pre><defined><get>goal.node.privateIP</get></defined></pre>
+        <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
         <pre><defined><get>goal.dseCreds.user</get></defined></pre>
         <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
@@ -167,42 +193,99 @@ gpgcheck=0
             <shell>
                 <describe locale="en_US">Copy YUM repository entry file to <get>goal.node.publicIP</get> using scp</describe>
                 <label>cpYumConfigForDatastax</label>
-                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get>:datastax.repo
+                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get>:datastax.repo
                 </send>
             </shell>
             <shell>
                 <describe locale="en_US">Make sure YUM program is installed on <get>goal.node.publicIP</get> using apt-get</describe>
                 <label>installYum</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo apt-get --assume-yes install yum*</send>
             </shell>
             <shell>
                 <describe locale="en_US">Move datastax YUM repo to /etc using sudo</describe>
                 <label>copyDSEReposFile</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
-                <send name="command" onFail="stop">sudo cp ~<get>goal.ec2Creds.user</get>/datastax.repo /etc/yum/repos.d/</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
+                <send name="command" onFail="stop">sudo cp ~<get>goal.sshCreds.user</get>/datastax.repo /etc/yum/repos.d/</send>
             </shell>
             <shell>
                 <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.publicIP</get> using yum</describe>
                 <label>installJava1.8</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
-                <send name="command" onFail="stop">sudo yum -y install java-1.8.0</send>
-                <send name="command" onFail="stop">sudo yum -y remove java-1.7.0-openjdk</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
+                <send name="command" onFail="stop">sudo apt-add-repository ppa:webupd8team/java -y</send>
+                <send name="command" onFail="stop">sudo apt-get update</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">sudo apt-get install oracle-java8-installer -y</send>
+                <send name="command" onFail="stop">sudo java -version</send>
             </shell>
             <shell>
                 <describe locale="en_US">Make sure DSE full product package is installed on <get>goal.node.publicIP</get> using yum</describe>
                 <label>installDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
-                <send name="command" onFail="stop">sudo yum -y install dse-full</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
+                <send name="command" onFail="stop">sudo apt-get install dse-full -y</send>
             </shell>
-            <shell>
+
+            <do>
                 <describe locale="en_US">Adjust cassandra.yaml to match best practice initial values on <get>goal.node.publicIP</get></describe>
-                <label>fix_cassandra_yaml</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
-                <send name="command" onFail="stop">sudo cp /etc/dse/cassandra/cassandra.yaml /etc/dse/cassandra/cassandra.yaml.original</send>
-                <send name="command" onFail="stop">sudo cat /etc/dse/cassandra/cassandra.yaml | sed 's/\# num_tokens:.*/num_tokens: 32/' | sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' |  &gt; sed 's/\authorizer:.*/authorizer: DSEAuthorizer/' | /etc/dse/cassandra/cassandra.yaml.fixed</send>
-                <send name="command" onFail="stop">sudo mv /etc/dse/cassandra/cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml.yaml</send>
-            </shell>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get>:/etc/dse/cassandra/cassandra.yaml cassandra.yaml.original</send>
+                </shell>
+                <python>
+                    <code>
+import re
+fin = open('cassandra.yaml.original','r')
+fout = open('cassandra.yaml.fixed','w')
+for line in fin:
+    # using private IP for seeds causes "Unable to gossip with any seeds" failure
+    line = re.sub('- seeds: "\S+"','- seeds: "<get>goal.node.privateIP</get>"',line)
+    line = re.sub('listen_address: \S+','listen_address: <get>goal.node.privateIP</get>',line)
+    line = re.sub('broadcast_rpc_address: \S+','broadcast_rpc_address: <get>goal.node.privateIP</get>',line)
+    # using public IP for rpc_address causes binding failure
+    line = re.sub('^rpc_address: \S+','rpc_address: 0.0.0.0',line)
+    line = re.sub('\# num_tokens:.*','num_tokens: 32',line)
+    # documentation says use fully-qualified Java class names for authenticator and authorizer, but that causes "class not found" failure 
+    line = re.sub('authenticator:.*','authenticator: PasswordAuthenticator',line)
+    line = re.sub('authorizer:.*','authorizer: CassandraAuthorizer',line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> cassandra.yaml.fixed <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml</send>
+                </shell>
+            </do>
+
+
+
+            <do>
+                <describe locale="en_US">Adjust cassandra-env.sh to match best practice initial values on <get>goal.node.publicIP</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get>:/etc/dse/cassandra/cassandra-env.sh cassandra-env.sh.original</send>
+                </shell>
+                <python>
+                    <referenceDoc><url>https://www.liquidweb.com/kb/error-failed-to-connect-to-127-0-0-17199-connection-refused-cassandra-solved/</url></referenceDoc>
+                    <code>
+import re
+fin = open('cassandra-env.sh.original','r')
+fout = open('cassandra-env.sh.fixed','w')
+for line in fin:
+    line = line.decode('utf8')
+    line = re.sub('\# JVM_OPTS="\$JVM_OPTS -Djava.rmi.server.hostname=.*"','JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname=<get>goal.node.publicIP</get>"',line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> cassandra-env.sh.fixed <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra-env.sh.fixed /etc/dse/cassandra/cassandra-env.sh</send>
+                </shell>
+            </do>
         </do>
     </method>
     <method name="startCassandraLocally" targetGoalType="startCassandraNode" goalSymbol="goal">
@@ -221,7 +304,7 @@ gpgcheck=0
     <method name="startCassandraNodeOverSSHToEC2" targetGoalType="startCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
         <pre>
-            <bool>False</bool>
+            <get>goal.isCassandraNode</get>
             <op name="ne"><get>host.hostip</get><get>goal.node.publicIP</get></op>
             <op name="or">
                 <op name="eq"><get>host.uname</get><string>Linux</string></op>
@@ -232,37 +315,81 @@ gpgcheck=0
         <do>
             <shell>
                 <label>startDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
-                <send name="command" onFail="ignore">sudo service dse start</send>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
+                <send name="command" onFail="stop">sudo apt install datastax-agent</send>
+                <send name="command" onFail="stop">sudo service dse start</send>
+                <send name="command" onFail="stop">sudo service dse restart</send>
+                <send name="command" onFail="stop">sudo service datastax-agent start</send>
             </shell>
-            <op name="isZero"><get>goal.command.rc</get></op>
         </do>
     </method>
     <method name="stopCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="stopCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
-        <DISABLE-pre>
-            <op name="eq"><get>host.uname</get><string>Linux</string></op>
-        </DISABLE-pre>
+        <pre>
+            <op name="ne"><get>host.hostip</get><get>goal.node.publicIP</get></op>
+            <op name="or">
+                <op name="eq"><get>host.uname</get><string>Linux</string></op>
+                <op name="eq"><get>host.uname</get><string>Darwin</string></op>
+            </op>
+        </pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <shell>
                 <label>stopDSEService</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo service dse stop</send>
             </shell>
         </do>
     </method>
     <method name="retireCassandraNodeOverSSHFromLinuxToEC2" targetGoalType="retireCassandraNode" goalSymbol="goal">
         <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
-        <DISABLE-pre>
-            <op name="eq"><get>host.uname</get><string>Linux</string></op>
-        </DISABLE-pre>
+        <pre>
+            <op name="ne"><get>host.hostip</get><get>goal.node.publicIP</get></op>
+            <op name="or">
+                <op name="eq"><get>host.uname</get><string>Linux</string></op>
+                <op name="eq"><get>host.uname</get><string>Darwin</string></op>
+            </op>
+        </pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
         <do>
             <shell>
                 <label>uninstallDSE</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">sudo yum -y remove dse-full</send>
+            </shell>
+        </do>
+    </method>
+    <method name="skipCassandraNode" targetGoalType="startCassandraNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
+        <pre>
+            <op name="not"><get>goal.isCassandraNode</get></op>
+        </pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
+    </method>
+    <method name="skipOpsCenterNode" targetGoalType="startOpsCenterNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
+        <pre>
+            <op name="not"><get>goal.isOpsCenterNode</get></op>
+        </pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
+    </method>
+    <method name="startOpsCenterNodeOverSSHToEC2" targetGoalType="startOpsCenterNode" goalSymbol="goal">
+        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
+        <pre>
+            <get>goal.isOpsCenterNode</get>
+            <op name="ne"><get>host.hostip</get><get>goal.node.publicIP</get></op>
+            <op name="or">
+                <op name="eq"><get>host.uname</get><string>Linux</string></op>
+                <op name="eq"><get>host.uname</get><string>Darwin</string></op>
+            </op>
+        </pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
+        <do>
+            <shell>
+                <label>startOpsCenterService</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
+                <send name="command" onFail="stop">sudo apt install opscenter</send>
+                <send name="command" onFail="stop">sudo service opscenterd start</send>
             </shell>
         </do>
     </method>
@@ -272,7 +399,7 @@ gpgcheck=0
         <do>
             <shell>
                 <label>installLoader</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.ec2Creds.certificate.localFilePath</get> <get>goal.ec2Creds.user</get>@<get>goal.node.publicIP</get></command>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>goal.sshCreds.privateKey.localFilePath</get> <get>goal.sshCreds.user</get>@<get>goal.node.publicIP</get></command>
                 <send name="command" onFail="stop">mkdir -p <get>goal.workDir</get></send>
                 <send name="command" onFail="stop">cd <get>goal.workDir</get></send>
                 <send name="command" onFail="stop">wget --user <get>goal.dseCreds.user</get> --password <get>goal.dseCreds.password</get> https://downloads.datastax.com/enterprise/dse-graph-loader.tar.gz</send>
@@ -365,42 +492,93 @@ gpgcheck=0
     <method name="installJavaByProbe" symbol="goal" targetGoalType="installAnyJava">
         <do><shell><send name="command" onFail="stop">java -version</send></shell></do>
     </method>
+    <goalProto name="generateSSHKeypair" symbol="goal">
+        <describe locale="en-US">Generate a public-private key pair in a known file path</describe>
+        <struct name="sshCreds" type="SSHKeypair">
+            <variable name="user" type="username">ubuntu</variable>
+            <variable name="keyName" type="string"/>
+            <struct name="privateKey" type="SSLCertificate">
+                <variable name="localFilePath" type="localFilePath">ssh_private_key.rsa</variable>
+            </struct>
+            <struct name="publicKey" type="SSLCertificate">
+                <variable name="localFilePath" type="localFilePath">ssh_public_key.rsa</variable>
+            </struct>
+        </struct>
+    </goalProto>
+    <method name="generateSSHKeypair" symbol="goal" targetGoalType="generateSSHKeypair">
+        <do>
+            <python>
+                <code>
+import uuid
+<set>goal.sshCreds.keyName</set> = str(uuid.uuid4())
+                </code>
+            </python>
+            <shell>
+                <send>rm -f <get>goal.sshCreds.privateKey.localFilePath</get></send>
+                <send>ssh-keygen -t rsa -f <get>goal.sshCreds.privateKey.localFilePath</get> -q -N "" </send>
+                <send>chmod 400 <get>goal.sshCreds.privateKey.localFilePath</get></send>
+                <send>mv <get>goal.sshCreds.privateKey.localFilePath</get>.pub <get>goal.sshCreds.publicKey.localFilePath</get></send>
+            </shell>
+        </do>
+    </method>
     <goalProto name="ProvisionEC2Cluster" symbol="goal">
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
         <variable name="config" type="EC2ClusterConfiguration"/>
-        <variable name="credentials" type="EC2Credentials"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>        
         <variable name="cluster" type="EC2Cluster"/>
         <variable name="instances" type="EC2Instances"/>
         <pre><defined><get>goal.config</get></defined></pre>
-        <pre><defined><get>goal.credentials</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds</get></defined></pre>
     </goalProto>
     <method name="ProvisionEC2Cluster" symbol="goal" targetGoalType="ProvisionEC2Cluster">
         <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
         <pre><goalCompleted name="installEC2CLITools"/></pre>
         <pre><goalCompleted name="installAnyJava"/></pre>
+        <do><goalCompleted name="generateSSHKeypair">
+            <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+        </goalCompleted></do>
+        <python>
+            <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>goal.config.region</get>',aws_access_key_id='<get>goal.ec2Creds.accessKey</get>',aws_secret_access_key='<get>goal.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+bfile = open('<get>goal.sshCreds.publicKey.localFilePath</get>','rb')
+botoResource.import_key_pair(KeyName='<get>goal.sshCreds.keyName</get>',PublicKeyMaterial=bfile.read())
+            </code>
+        </python>
         <do><goalCompleted name="ProvisionEC2Group">
-            <variable name="config" type="EC2ClusterConfiguration"><get>goal.config.analyticNodes</get></variable>
-            <variable name="credentials"><get>goal.credentials</get></variable>
+            <variable name="config" type="EC2GroupConfiguration"><get>goal.config.analyticNodes</get></variable>
+            <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+            <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
+            <variable name="dseCreds"><get>goal.dseCreds</get></variable>
             <variable name="instances"><get>goal.instances</get></variable>
         </goalCompleted></do>
         <do><goalCompleted name="ProvisionEC2Group">
-            <variable name="config" type="EC2ClusterConfiguration"><get>goal.config.transactionalNodes</get></variable>
-            <variable name="credentials"><get>goal.credentials</get></variable>
+            <variable name="config" type="EC2GroupConfiguration"><get>goal.config.transactionalNodes</get></variable>
+            <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+            <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
+            <variable name="dseCreds"><get>goal.dseCreds</get></variable>
             <variable name="instances"><get>goal.instances</get></variable>
         </goalCompleted></do>
         <do><goalCompleted name="ProvisionEC2Group">
-            <variable name="config" type="EC2ClusterConfiguration"><get>goal.config.opsNode</get></variable>
-            <variable name="credentials"><get>goal.credentials</get></variable>
+            <variable name="config" type="EC2GroupConfiguration"><get>goal.config.opsNode</get></variable>
+            <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+            <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
+            <variable name="dseCreds"><get>goal.dseCreds</get></variable>
             <variable name="instances"><get>goal.instances</get></variable>
         </goalCompleted></do>
     </method>
     <goalProto name="ProvisionEC2Group" symbol="goal">
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
-        <variable name="config" type="EC2ClusterConfiguration"/>
-        <variable name="credentials" type="EC2Credentials"/>
+        <variable name="config" type="EC2GroupConfiguration"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
         <variable name="instances" type="EC2Instances"/>
         <pre><defined><get>goal.config</get></defined></pre>
-        <pre><defined><get>goal.credentials</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds</get></defined></pre>
     </goalProto>
     <method name="ProvisionEC2Group" symbol="goal" targetGoalType="ProvisionEC2Group">
         <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
@@ -410,10 +588,9 @@ gpgcheck=0
             <python>
                 <code>
 import boto3
-#rds = boto3.setup_default_session(region_name='<get>goal.config.region</get>')
-botoSession = boto3.session.Session(region_name='<get>goal.config.region</get>',aws_access_key_id='<get>goal.credentials.accessKey</get>',aws_secret_access_key='<get>goal.credentials.secretKey</get>')
+botoSession = boto3.session.Session(region_name='<get>goal.config.region</get>',aws_access_key_id='<get>goal.ec2Creds.accessKey</get>',aws_secret_access_key='<get>goal.ec2Creds.secretKey</get>')
 botoResource = botoSession.resource('ec2')
-instances = botoResource.create_instances(InstanceType='<get>goal.config.instanceType</get>',ImageId='<get>goal.config.image</get>', MinCount=<get>goal.config.numNodes</get>, MaxCount=<get>goal.config.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>goal.config.securityGroupId</get>'],AssociatePublicIpAddress=True)])
+instances = botoResource.create_instances(KeyName='<get>goal.sshCreds.keyName</get>',InstanceType='<get>goal.config.instanceType</get>',ImageId='<get>goal.config.image</get>', MinCount=<get>goal.config.numNodes</get>, MaxCount=<get>goal.config.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>goal.config.securityGroupId</get>'],AssociatePublicIpAddress=True)])
 <set>goal.instances</set> = []
 for instance in instances:
     instance.wait_until_running()
@@ -421,14 +598,62 @@ for instance in instances:
     <set>goal.instances</set>.append(instance)
                 </code>
             </python>
+            <python>
+                <describe locale="en-US">Wait 300s for apt-get repositories on EC2 images to stabilize</describe>
+                <code>
+import time
+time.sleep(300)
+                </code>
+            </python>                
             <find symbol="instance">
                 <in><get>goal.instances</get></in>
                 <do>
-                    <python>
-                        <code>
-print 'DEBUG: instance named %s public %s private %s' % (<set>instance</set>.id,<set>instance</set>.public_ip_address,<set>instance</set>.private_ip_address)
-                        </code>
-                    </python>
+                    <goalCompleted name="setupCassandraNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="publicIP" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="privateIP" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            <struct name="credentials" type="SSHKeypair">
+                                <variable name="user" type="username">ubuntu</variable>
+                                <struct name="privateKey" type="SSLCertificate">
+                                    <get>goal.sshCreds.privateKey</get>
+                                </struct>
+                            </struct>
+                        </struct>
+                        <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+                        <variable name="dseCreds"><get>goal.dseCreds</get></variable>
+                    </goalCompleted>
+                    <goalCompleted name="startCassandraNode">
+                        <variable name="isCassandraNode" type="boolean"><get>goal.config.isCassandraNode</get></variable>
+                        <variable name="isOpsCenterNode" type="boolean"><get>goal.config.isOpsCenterNode</get></variable>
+                        <struct name="node" type="EC2Node">
+                            <variable name="publicIP" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="privateIP" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            <struct name="credentials" type="SSHKeypair">
+                                <variable name="user" type="username">ubuntu</variable>
+                                <struct name="privateKey" type="SSLCertificate">
+                                    <get>goal.sshCreds.privateKey</get>
+                                </struct>
+                            </struct>
+                        </struct>
+                        <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+                        <variable name="dseCreds"><get>goal.dseCreds</get></variable>
+                    </goalCompleted>
+                    <goalCompleted name="startOpsCenterNode">
+                        <variable name="isCassandraNode" type="boolean"><get>goal.config.isCassandraNode</get></variable>
+                        <variable name="isOpsCenterNode" type="boolean"><get>goal.config.isOpsCenterNode</get></variable>
+                        <struct name="node" type="EC2Node">
+                            <variable name="publicIP" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="privateIP" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            <struct name="credentials" type="SSHKeypair">
+                                <variable name="user" type="username">ubuntu</variable>
+                                <struct name="privateKey" type="SSLCertificate">
+                                    <get>goal.sshCreds.privateKey</get>
+                                </struct>
+                            </struct>
+                        </struct>
+                        <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+                        <variable name="dseCreds"><get>goal.dseCreds</get></variable>
+                    </goalCompleted>
                 </do>
             </find>                
         </do>
