@@ -646,7 +646,7 @@ class Evaluator:
         self.outcome = EvalOutcomes().setTrue()
 
     def doDefined(self,a):
-        self.value = a.isSuccess() and (a.getLvalue() or a.getRvalue())
+        self.value = a.isSuccess() and (a.getLvalue() != None or a.getRvalue() != None)
         if self.agent.verboseMode(1) and not a.isSuccess():
             for error in a.errors:
                 print error

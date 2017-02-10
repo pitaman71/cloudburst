@@ -11,8 +11,8 @@
             <variable name="region" type="string">us-east-2</variable>
             <variable name="networkAdapterName" type="string">enet0</variable>
             <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
-            <variable name="isCassandraNode" type="boolean">True</variable>
-            <variable name="isOpsCenterNode" type="boolean">False</variable>
+            <variable name="isCassandraNode" type="bool">True</variable>
+            <variable name="isOpsCenterNode" type="bool">False</variable>
         </struct>
         <struct name="transactionalNodes" type="EC2GroupConfiguration">
             <variable name="numNodes" type="int">6</variable>
@@ -22,8 +22,8 @@
             <variable name="region" type="string">us-east-2</variable>
             <variable name="networkAdapterName" type="string">enet0</variable>
             <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
-            <variable name="isCassandraNode" type="boolean">True</variable>
-            <variable name="isOpsCenterNode" type="boolean">False</variable>
+            <variable name="isCassandraNode" type="bool">True</variable>
+            <variable name="isOpsCenterNode" type="bool">False</variable>
         </struct>
         <struct name="opsNode" type="EC2GroupConfiguration">
             <variable name="numNodes" type="int">1</variable>
@@ -33,8 +33,8 @@
             <variable name="region" type="string">us-east-2</variable>
             <variable name="networkAdapterName" type="string">enet0</variable>
             <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
-            <variable name="isCassandraNode" type="boolean">False</variable>
-            <variable name="isOpsCenterNode" type="boolean">True</variable>
+            <variable name="isCassandraNode" type="bool">False</variable>
+            <variable name="isOpsCenterNode" type="bool">True</variable>
         </struct>
     </struct>
     <struct name="i-02e3afedc1a92b410" type="EC2Node">
@@ -100,6 +100,24 @@
             </struct>
         </struct>
     </struct>
+    <goalProto name="test1" symbol="goal">
+        <variable name="selector" type="int"/>
+        <pre><defined><get>goal.selector</get></defined></pre>
+    </goalProto>
+    <method name="test1isTrue" targetGoalType="test1" goalSymbol="goal">
+        <pre><get>goal.selector</get></pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
+        <do>
+            <get>goal.selector</get>
+        </do>
+    </method>
+    <method name="test1isFalse" targetGoalType="test1" goalSymbol="goal">
+        <pre><op name="not"><get>goal.selector</get></op></pre>
+        <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
+        <do>
+            <op name="not"><get>goal.selector</get></op>
+        </do>
+    </method>
     <goalProto name="setupCassandraNode" symbol="goal">
         <describe locale="en-US">Configure EC2 node to run the Datastax Enterprise Graph Example</describe>
         <variable name="node" type="EC2Node"/>
@@ -117,7 +135,7 @@
         <variable name="node" type="EC2Node"/>
         <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <variable name="isCassandraNode" type="boolean">True</variable>
+        <variable name="isCassandraNode" type="bool"/>
         <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.node.privateIP</get></defined></pre>
@@ -130,7 +148,7 @@
         <variable name="node" type="EC2Node"/>
         <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <variable name="isOpsCenterNode" type="boolean">True</variable>
+        <variable name="isOpsCenterNode" type="bool"/>
         <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.node.privateIP</get></defined></pre>
@@ -360,14 +378,14 @@ for line in fin:
         </do>
     </method>
     <method name="skipCassandraNode" targetGoalType="startCassandraNode" goalSymbol="goal">
-        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
+        <describe locale="en-US">Cassandra will not run on this node</describe>
         <pre>
             <op name="not"><get>goal.isCassandraNode</get></op>
         </pre>
         <referenceDoc><url>http://docs.datastax.com/en/datastax_enterprise/5.0/datastax_enterprise/install/installRHELdse.html</url></referenceDoc>
     </method>
     <method name="skipOpsCenterNode" targetGoalType="startOpsCenterNode" goalSymbol="goal">
-        <describe locale="en-US">by sending shell commands to the EC2 host over SSH one at a time</describe>
+        <describe locale="en-US">OpsCenter will not run on this node</describe>
         <pre>
             <op name="not"><get>goal.isOpsCenterNode</get></op>
         </pre>
@@ -623,8 +641,8 @@ time.sleep(300)
                         <variable name="dseCreds"><get>goal.dseCreds</get></variable>
                     </goalCompleted>
                     <goalCompleted name="startCassandraNode">
-                        <variable name="isCassandraNode" type="boolean"><get>goal.config.isCassandraNode</get></variable>
-                        <variable name="isOpsCenterNode" type="boolean"><get>goal.config.isOpsCenterNode</get></variable>
+                        <variable name="isCassandraNode" type="bool"><get>goal.config.isCassandraNode</get></variable>
+                        <variable name="isOpsCenterNode" type="bool"><get>goal.config.isOpsCenterNode</get></variable>
                         <struct name="node" type="EC2Node">
                             <variable name="publicIP" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
                             <variable name="privateIP" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
@@ -639,8 +657,8 @@ time.sleep(300)
                         <variable name="dseCreds"><get>goal.dseCreds</get></variable>
                     </goalCompleted>
                     <goalCompleted name="startOpsCenterNode">
-                        <variable name="isCassandraNode" type="boolean"><get>goal.config.isCassandraNode</get></variable>
-                        <variable name="isOpsCenterNode" type="boolean"><get>goal.config.isOpsCenterNode</get></variable>
+                        <variable name="isCassandraNode" type="bool"><get>goal.config.isCassandraNode</get></variable>
+                        <variable name="isOpsCenterNode" type="bool"><get>goal.config.isOpsCenterNode</get></variable>
                         <struct name="node" type="EC2Node">
                             <variable name="publicIP" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
                             <variable name="privateIP" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
