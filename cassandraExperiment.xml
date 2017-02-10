@@ -691,4 +691,21 @@ time.sleep(300)
             </shell>
         </do>
     </method>
+    <goalProto name="ec2KillAll" symbol="goal">
+        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="region" type="string"/>
+        <pre><defined><get>goal.region</get></defined></pre>
+    </goalProto>
+    <method name="ec2KillAll" symbol="goal" targetGoalType="ec2KillAll">
+        <do>
+            <shell>
+                <send>
+                for ip in $($EC2_HOME/bin/ec2-describe-instances -O <get>goal.ec2Creds.accessKey</get> -W <get>goal.ec2Creds.secretKey</get> --region <get>goal.region</get> | grep INSTANCE | cut -f2); do 
+                    echo 'Sending command to terminate EC2 instance ' $ip ; 
+                    $EC2_HOME/bin/ec2-terminate-instances $ip -O <get>goal.ec2Creds.accessKey</get> -W <get>goal.ec2Creds.secretKey</get> --region --region <get>goal.region</get>; 
+                done
+                </send>
+            </shell>
+        </do>
+    </method>
 </hive>

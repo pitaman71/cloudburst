@@ -781,6 +781,7 @@ class Evaluator:
                         cmdList = [cmd]
                         #self.createError('Cannot expand this shell expression:\n%s\n' % cmd)
                     for cmd in cmdList:
+                        cmd = re.sub('\s*\n\s*',' ',cmd.strip())                        
                         if self.agent.verboseMode(1):
                             print 'BEGIN shell command: %s' % cmd
                         timeout = None
@@ -1277,12 +1278,30 @@ class Goal:
                         if self.hasErrors():
                             print "ERRORS %s" % cmd
                         elif self.agent.solver.args.execute:
+                            if(shellCommand != None):
+                                cmd = re.sub('\s*\n\s*',' ',cmd.strip())
+
                             if self.agent.echoMode():
                                 print "BEGIN <shell><send>%s</send></shell>" % cmd
+
+#                            scriptFile = tempfile.NamedTemporaryFile(prefix='script')
                             timeout = None
                             if 'timeout' in child.attrib:
                                 timeout = child.get('timeout')
-                            lastCommand = pexpect.run(cmd,withexitstatus=1,timeout=timeout)
+
+                            if(shellCommand != None):
+                                lastCommand = pexpect.run(cmd,withexitstatus=1,timeout=timeout)
+                            else:
+                                scriptFile = open('tempScript','wt')
+                                print >>scriptFile, cmd
+                                scriptFile.flush()
+                                scriptFile.close()
+
+                                if self.agent.verboseMode(1):
+                                    print 'SCRIPT is stored in temporary aux file %s' % scriptFile.name
+
+                                lastCommand = pexpect.run('/bin/bash %s' % scriptFile.name,withexitstatus=1,timeout=timeout)
+
                             if self.agent.verboseMode(1):
                                 print lastCommand[0]
                             if 'name' in child.attrib:
