@@ -428,6 +428,7 @@ for line in fin:
     </method>
     <goalProto name="installHomebrew" symbol="goal">
         <describe locale="en-US">Ensure that Homebrew is installed on host</describe>
+        <pre><op name="eq"><get>host.uname</get><string>Darwin</string></op></pre>
         <post><op name="isZero"><shell value="returnCode"><send name="command" onFail="stop">which brew</send></shell></op></post>
     </goalProto>
     <method name="installHomebrew" targetGoalType="installHomebrew" symbol="goal">
@@ -440,30 +441,40 @@ for line in fin:
             </shell>
         </do>
     </method>
-    <goalProto name="installToolViaHomebrew" symbol="goal">
+    <goalProto name="installUNIXTool" symbol="goal">
         <describe locale="en-US">Ensure that <get>goal.toolName</get> is installed via Mac OS X Homebrew</describe>
         <variable name="toolName" type="programName"/>
         <post><op name="isZero"><shell value="returnCode"><send name="command" onFail="stop">which <get>goal.toolName</get></send></shell></op></post>
     </goalProto>
-    <method name="installToolViaHomebrew" targetGoalType="installToolViaHomebrew" symbol="goal">
+    <method name="installToolViaAptGet" targetGoalType="installUNIXTool" symbol="goal">
+        <pre><op name="eq"><get>host.uname</get><string>Linux</string></op></pre>
+        <describe locale="en-US">using apt-get command</describe>
+        <do>
+            <shell>
+                <label>install</label>
+                <send name="command" onFail="stop">sudo apt-get install <get>goal.toolName</get></send>
+            </shell>
+        </do>
+    </method>
+    <method name="installToolViaHomebrew" targetGoalType="installUNIXTool" symbol="goal">
+        <pre><op name="eq"><get>host.uname</get><string>Darwin</string></op></pre>
         <pre><goalCompleted name="installHomebrew"/></pre>
         <describe locale="en-US">using brew command</describe>
         <referenceDoc><url>http://brew.sh</url></referenceDoc>
         <do>
             <shell>
                 <label>install</label>
-                <send name="command" onFail="stop">brew install wget</send>
+                <send name="command" onFail="stop">brew install <get>goal.toolName</get></send>
             </shell>
         </do>
     </method>
     <goalProto name="installToolViaPIP" symbol="goal">
-        <describe locale="en-US">Ensure that <get>goal.toolName</get> is installed via Mac OS X Homebrew</describe>
+        <describe locale="en-US">Ensure that <get>goal.toolName</get> is installed via Python PIP</describe>
         <variable name="toolName" type="programName"/>
         <post><op name="isZero"><shell value="returnCode"><send name="command">pip show <get>goal.toolName</get></send></shell></op></post>
     </goalProto>
     <method name="installToolViaPIP" targetGoalType="installToolViaPIP" symbol="goal">
         <describe locale="en-US">using pip</describe>
-        <referenceDoc><url>http://brew.sh</url></referenceDoc>
         <do>
             <shell name="doShell">
                 <label>install</label>
@@ -476,7 +487,7 @@ for line in fin:
         <post><fileTest type="exists">ec2</fileTest></post>
     </goalProto>
     <method name="installEC2CLIToolsViaWget" targetGoalType="installEC2CLITools" goalSymbol="goal">
-        <pre><goalCompleted name="installToolViaHomebrew"><variable name="toolName">wget</variable></goalCompleted></pre>
+        <pre><goalCompleted name="installUNIXTool"><variable name="toolName">wget</variable></goalCompleted></pre>
         <do>
             <shell>
                 <label>fetchZipfile</label>
@@ -679,7 +690,7 @@ time.sleep(300)
     <goalProto name="installDSEOpsCenter" symbol="goal">
         <describe locale="en-US">Ensure host has Datastax OpsCenter installed</describe>
         <variable name="dseCreds" type="PasswordCredentials"/>
-        <pre><goalCompleted name="installToolViaHomebrew"><variable name="toolName">wget</variable></goalCompleted></pre>
+        <pre><goalCompleted name="installUNIXTool"><variable name="toolName">wget</variable></goalCompleted></pre>
     </goalProto>
     <method name="installDSEOpsCenter" symbol="goal" targetGoalType="installDSEOpsCenter">
         <referenceDoc><url>https://docs.datastax.com/en/latest-opscenter/opsc/install/opscInstallTar_t.html</url></referenceDoc>
