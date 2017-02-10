@@ -123,6 +123,7 @@
         <variable name="node" type="EC2Node"/>
         <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
+        <variable name="seeds" type="EC2Instances"/>
         <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.node.privateIP</get></defined></pre>
@@ -134,14 +135,11 @@
         <describe locale="en-US">Start the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="sshCreds" type="SSHKeypair"/>
-        <variable name="dseCreds" type="PasswordCredentials"/>
         <variable name="isCassandraNode" type="bool"/>
         <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.node.privateIP</get></defined></pre>
         <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
-        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
-        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="startOpsCenterNode" symbol="goal">
         <describe locale="en-US">Start the Datastax Enterprise Graph service</describe>
@@ -160,25 +158,19 @@
         <describe locale="en-US">Stop the Datastax Enterprise Graph service</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="sshCreds" type="SSHKeypair"/>
-        <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.node.privateIP</get></defined></pre>
         <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
-        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
-        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="retireCassandraNode" symbol="goal">
         <describe locale="en-US">Dismantle EC2 node configuration</describe>
         <variable name="node" type="EC2Node"/>
         <variable name="sshCreds" type="SSHKeypair"/>
-        <variable name="dseCreds" type="PasswordCredentials"/>
         <pre><defined><get>goal.sshCreds.user</get></defined></pre>
         <pre><defined><get>goal.node.publicIP</get></defined></pre>
         <pre><defined><get>goal.node.privateIP</get></defined></pre>
         <pre><defined><get>goal.sshCreds.privateKey.localFilePath</get></defined></pre>
-        <pre><defined><get>goal.dseCreds.user</get></defined></pre>
-        <pre><defined><get>goal.dseCreds.password</get></defined></pre>
     </goalProto>
     <goalProto name="installDSEGLoader" symbol="goal">
         <describe locale="en-US">Install (optional) DSEG Loader tool</describe>
@@ -254,9 +246,11 @@ gpgcheck=0
 import re
 fin = open('cassandra.yaml.original','r')
 fout = open('cassandra.yaml.fixed','w')
+seedString = ','.join([instance.private_ip_address for instance in <set>goal.seeds</set>])
+print 'DEBUG: seedString = %s' % seedString
 for line in fin:
     # using private IP for seeds causes "Unable to gossip with any seeds" failure
-    line = re.sub('- seeds: "\S+"','- seeds: "<get>goal.node.privateIP</get>"',line)
+    line = re.sub('- seeds: "\S+"','- seeds: "%s"' % seedString,line)
     line = re.sub('listen_address: \S+','listen_address: <get>goal.node.privateIP</get>',line)
     line = re.sub('broadcast_rpc_address: \S+','broadcast_rpc_address: <get>goal.node.privateIP</get>',line)
     # using public IP for rpc_address causes binding failure
@@ -546,7 +540,10 @@ import uuid
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>        
         <variable name="cluster" type="EC2Cluster"/>
-        <variable name="instances" type="EC2Instances"/>
+        <variable name="analyticInstances" type="EC2Instances"/>
+        <variable name="transactionalInstances" type="EC2Instances"/>
+        <variable name="opsInstances" type="EC2Instances"/>
+        <variable name="seeds" type="EC2Instances"/>
         <pre><defined><get>goal.config</get></defined></pre>
         <pre><defined><get>goal.ec2Creds</get></defined></pre>
     </goalProto>
@@ -564,41 +561,80 @@ botoSession = boto3.session.Session(region_name='<get>goal.config.region</get>',
 botoResource = botoSession.resource('ec2')
 bfile = open('<get>goal.sshCreds.publicKey.localFilePath</get>','rb')
 botoResource.import_key_pair(KeyName='<get>goal.sshCreds.keyName</get>',PublicKeyMaterial=bfile.read())
-            </code>
+<set>goal.seeds</set> = []
+<set>goal.analyticInstances</set> = []
+<set>goal.transactionalInstances</set> = []
+<set>goal.opsInstances</set> = []
+</code>
         </python>
-        <do><goalCompleted name="ProvisionEC2Group">
+        <do><goalCompleted name="AllocateEC2Group">
             <variable name="config" type="EC2GroupConfiguration"><get>goal.config.analyticNodes</get></variable>
             <variable name="sshCreds"><get>goal.sshCreds</get></variable>
             <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
             <variable name="dseCreds"><get>goal.dseCreds</get></variable>
-            <variable name="instances"><get>goal.instances</get></variable>
+            <variable name="instances"><get>goal.analyticInstances</get></variable>
+            <variable name="seeds"><get>goal.seeds</get></variable>
         </goalCompleted></do>
-        <do><goalCompleted name="ProvisionEC2Group">
+        <do><goalCompleted name="AllocateEC2Group">
             <variable name="config" type="EC2GroupConfiguration"><get>goal.config.transactionalNodes</get></variable>
             <variable name="sshCreds"><get>goal.sshCreds</get></variable>
             <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
             <variable name="dseCreds"><get>goal.dseCreds</get></variable>
-            <variable name="instances"><get>goal.instances</get></variable>
+            <variable name="instances"><get>goal.transactionalInstances</get></variable>
+            <variable name="seeds"><get>goal.seeds</get></variable>
         </goalCompleted></do>
-        <do><goalCompleted name="ProvisionEC2Group">
+        <do><goalCompleted name="AllocateEC2Group">
             <variable name="config" type="EC2GroupConfiguration"><get>goal.config.opsNode</get></variable>
             <variable name="sshCreds"><get>goal.sshCreds</get></variable>
             <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
             <variable name="dseCreds"><get>goal.dseCreds</get></variable>
-            <variable name="instances"><get>goal.instances</get></variable>
+            <variable name="instances"><get>goal.opsInstances</get></variable>
+            <variable name="seeds"><get>goal.seeds</get></variable>
+        </goalCompleted></do>
+        <do><python>
+                <describe locale="en-US">Wait 300s for apt-get repositories on EC2 images to stabilize</describe>
+                <code>
+import time
+time.sleep(300)
+                </code>
+        </python></do>
+        <do><goalCompleted name="ConfigureEC2Group">
+            <variable name="config" type="EC2GroupConfiguration"><get>goal.config.analyticNodes</get></variable>
+            <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+            <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
+            <variable name="dseCreds"><get>goal.dseCreds</get></variable>
+            <variable name="instances"><get>goal.analyticInstances</get></variable>
+            <variable name="seeds"><get>goal.seeds</get></variable>
+        </goalCompleted></do>
+        <do><goalCompleted name="ConfigureEC2Group">
+            <variable name="config" type="EC2GroupConfiguration"><get>goal.config.transactionalNodes</get></variable>
+            <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+            <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
+            <variable name="dseCreds"><get>goal.dseCreds</get></variable>
+            <variable name="instances"><get>goal.transactionalInstances</get></variable>
+            <variable name="seeds"><get>goal.seeds</get></variable>
+        </goalCompleted></do>
+        <do><goalCompleted name="ConfigureEC2Group">
+            <variable name="config" type="EC2GroupConfiguration"><get>goal.config.opsNode</get></variable>
+            <variable name="sshCreds"><get>goal.sshCreds</get></variable>
+            <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
+            <variable name="dseCreds"><get>goal.dseCreds</get></variable>
+            <variable name="instances"><get>goal.opsInstances</get></variable>
+            <variable name="seeds"><get>goal.seeds</get></variable>
         </goalCompleted></do>
     </method>
-    <goalProto name="ProvisionEC2Group" symbol="goal">
+    <goalProto name="AllocateEC2Group" symbol="goal">
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
         <variable name="config" type="EC2GroupConfiguration"/>
         <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <variable name="instances" type="EC2Instances"/>
+        <variable name="seeds" type="EC2Instances"/>
         <pre><defined><get>goal.config</get></defined></pre>
         <pre><defined><get>goal.ec2Creds</get></defined></pre>
     </goalProto>
-    <method name="ProvisionEC2Group" symbol="goal" targetGoalType="ProvisionEC2Group">
+    <method name="AllocateEC2Group" symbol="goal" targetGoalType="AllocateEC2Group">
         <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
         <pre><goalCompleted name="installEC2CLITools"/></pre>
         <pre><goalCompleted name="installAnyJava"/></pre>
@@ -609,20 +645,36 @@ import boto3
 botoSession = boto3.session.Session(region_name='<get>goal.config.region</get>',aws_access_key_id='<get>goal.ec2Creds.accessKey</get>',aws_secret_access_key='<get>goal.ec2Creds.secretKey</get>')
 botoResource = botoSession.resource('ec2')
 instances = botoResource.create_instances(KeyName='<get>goal.sshCreds.keyName</get>',InstanceType='<get>goal.config.instanceType</get>',ImageId='<get>goal.config.image</get>', MinCount=<get>goal.config.numNodes</get>, MaxCount=<get>goal.config.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>goal.config.securityGroupId</get>'],AssociatePublicIpAddress=True)])
-<set>goal.instances</set> = []
+if <get>goal.config.isCassandraNode</get>:
+    <set>goal.seeds</set>.append(instances[0])
 for instance in instances:
     instance.wait_until_running()
     instance.load()
     <set>goal.instances</set>.append(instance)
                 </code>
             </python>
-            <python>
-                <describe locale="en-US">Wait 300s for apt-get repositories on EC2 images to stabilize</describe>
-                <code>
-import time
-time.sleep(300)
-                </code>
-            </python>                
+        </do>
+    </method>
+
+
+
+
+    <goalProto name="ConfigureEC2Group" symbol="goal">
+        <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
+        <variable name="config" type="EC2GroupConfiguration"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <variable name="instances" type="EC2Instances"/>
+        <variable name="seeds" type="EC2Instances"/>
+        <pre><defined><get>goal.config</get></defined></pre>
+        <pre><defined><get>goal.ec2Creds</get></defined></pre>
+    </goalProto>
+    <method name="ConfigureEC2Group" symbol="goal" targetGoalType="ConfigureEC2Group">
+        <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+        <pre><goalCompleted name="installEC2CLITools"/></pre>
+        <pre><goalCompleted name="installAnyJava"/></pre>
+        <do>
             <find symbol="instance">
                 <in><get>goal.instances</get></in>
                 <do>
@@ -637,6 +689,7 @@ time.sleep(300)
                                 </struct>
                             </struct>
                         </struct>
+                        <variable name="seeds"><get>goal.seeds</get></variable>
                         <variable name="sshCreds"><get>goal.sshCreds</get></variable>
                         <variable name="dseCreds"><get>goal.dseCreds</get></variable>
                     </goalCompleted>
@@ -654,7 +707,6 @@ time.sleep(300)
                             </struct>
                         </struct>
                         <variable name="sshCreds"><get>goal.sshCreds</get></variable>
-                        <variable name="dseCreds"><get>goal.dseCreds</get></variable>
                     </goalCompleted>
                     <goalCompleted name="startOpsCenterNode">
                         <variable name="isCassandraNode" type="bool"><get>goal.config.isCassandraNode</get></variable>
@@ -676,6 +728,11 @@ time.sleep(300)
             </find>                
         </do>
     </method>
+
+
+
+
+
     <goalProto name="installDSEOpsCenter" symbol="goal">
         <describe locale="en-US">Ensure host has Datastax OpsCenter installed</describe>
         <variable name="dseCreds" type="PasswordCredentials"/>
@@ -699,10 +756,11 @@ time.sleep(300)
     <method name="ec2KillAll" symbol="goal" targetGoalType="ec2KillAll">
         <do>
             <shell>
+                <describe locale="en-US">Call the EC2 command-line API to obtain all instances for region <get>goal.region</get> and terminate all instances in that region</describe>
                 <send>
                 for ip in $($EC2_HOME/bin/ec2-describe-instances -O <get>goal.ec2Creds.accessKey</get> -W <get>goal.ec2Creds.secretKey</get> --region <get>goal.region</get> | grep INSTANCE | cut -f2); do 
                     echo 'Sending command to terminate EC2 instance ' $ip ; 
-                    $EC2_HOME/bin/ec2-terminate-instances $ip -O <get>goal.ec2Creds.accessKey</get> -W <get>goal.ec2Creds.secretKey</get> --region --region <get>goal.region</get>; 
+                    $EC2_HOME/bin/ec2-terminate-instances $ip -O <get>goal.ec2Creds.accessKey</get> -W <get>goal.ec2Creds.secretKey</get> --region <get>goal.region</get>; 
                 done
                 </send>
             </shell>
