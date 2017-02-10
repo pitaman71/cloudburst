@@ -338,7 +338,7 @@ class Solver:
 
         if self.args.initial:
             print 'BEGIN INITIAL STATE OF AGENT %s' % agent.name
-            agent.state.details()
+            print agent.state.details()
             print 'END   INITIAL STATE OF AGENT %s' % agent.name
 
         return agent
@@ -346,7 +346,7 @@ class Solver:
     def endAgent(self,agent):
         if self.args.final:
             print 'BEGIN FINAL STATE OF AGENT %s' % agent.name
-            agent.state.details()
+            print agent.state.details()
             print 'END   FINAL STATE OF AGENT %s' % agent.name
 
         self.agents.remove(agent)
@@ -410,7 +410,7 @@ class Agent:
                 sub.setXML(child)
                 sub.evaluate()
                 if sub.isSuccess():
-                    cmd += sub.getRvalue()
+                    cmd += sub.getStringValue()
                 else:
                     for error in sub.errors:
                         errHandler.errors.append(error)
@@ -548,6 +548,7 @@ class Evaluator:
         self.outcome = EvalOutcomes().setTrue()
         self.tail = ''
         self.pursue = pursue
+        self.value = None
 
     def setXML(self,xmlExpr):
         self.expr=xmlExpr
@@ -566,6 +567,15 @@ class Evaluator:
             return self.value
         else:
             return None
+
+    def getStringValue(self):
+        rvalue = self.getRvalue()
+        if rvalue != None:
+            return str(rvalue)
+        elif 'expr' in self.__dict__:
+            return ElementTree.tostring(self.expr)
+        else:
+            return None # this will cause a downstream error
 
     def getRvalue(self):
         result = None
@@ -731,7 +741,7 @@ class Evaluator:
                 interpreted = True
                 text = ''
                 for child in childResults:
-                    text += str(child.getRvalue())
+                    text += child.getStringValue()
                     if child.tail:
                         text += child.tail
                     self.outcome = self.outcome and child.outcome
@@ -820,13 +830,17 @@ class Evaluator:
                 if len(childResults) != 1:
                     self.createError('python tag must always have a path as its only child')
                 else:
-                    cmd = 'self.value = %s(\'%s\')' % (funcName,str(childResults[0].getRvalue()))
-                    if self.agent.echoMode():
-                        print "BEGIN <python><code>\n%s\n</code></python>" % cmd
-                    exec(cmd)
-                    if self.agent.echoMode():
-                        print "END   <python><code>\n%s\n</code></python>" % cmd
-                    interpreted = True
+                    cmd = 'self.value = %s(\'%s\')' % (funcName,childResults[0].getStringValue())
+                    if self.agent.solver.args.plan:
+                        print '\n'.join(['PLAN %s' % x for x in cmd.split('\n')])
+                        interpreted = True
+                    else:
+                        if self.agent.echoMode():
+                            print "BEGIN <python><code>\n%s\n</code></python>" % cmd
+                        exec(cmd)
+                        if self.agent.echoMode():
+                            print "END   <python><code>\n%s\n</code></python>" % cmd
+                        interpreted = True
             elif len(codeBlocks) > 0:
 #                print 'DEBUG: %d code blocks' % len(codeBlocks)
                 for codeBlock in codeBlocks:
@@ -837,8 +851,11 @@ class Evaluator:
                         self.createError('Cannot interpret this <code> block')
                         for error in sub.errors:
                             self.errors.append(error)
+                    elif self.agent.solver.args.plan:
+                        print '\n'.join(['PLAN %s' % x for x in sub.getStringValue().split('\n')])
+                        interpreted = True
                     else:
-                        cmd = sub.getRvalue()
+                        cmd = sub.getStringValue()
                         localContext = dict(locals())
                         self.context.root.configureMapping(localContext)
                         if self.agent.echoMode():
@@ -875,7 +892,7 @@ class Evaluator:
             self.createError('Cannot interpret this expression')
 
         if self.agent.verboseMode(2):
-            print 'END   evaluating expression '+self.expr.tag+' at '+self.label+' with result: '+(str(self.getRvalue()) if self.isSuccess() else self.getOutcome().tostring())
+            print 'END   evaluating expression '+self.expr.tag+' at '+self.label+' with result: '+(self.getStringValue() if self.isSuccess() else self.getOutcome().tostring())
 
 
     def doText(self):
@@ -914,10 +931,10 @@ class Goal:
         goalNode = self.context.root.lookupTermList(True,['goal'],None)
         goalNode.setupStruct()
         if self.agent.verboseMode(1):
-            print 'DEBUG: BEGIN configuring goal %s at %s:%d' % (name,argXML._file_name,argXML._start_line_number)
+            print 'BEGIN configuring goal %s at %s:%d' % (name,argXML._file_name,argXML._start_line_number)
         goalNode.initStateChildren(self.agent.solver,argContext,argXML)
         if self.agent.verboseMode(1):
-            print 'DEBUG: END   configuring goal %s at %s:%d' % (name,argXML._file_name,argXML._start_line_number)
+            print 'END   configuring goal %s at %s:%d' % (name,argXML._file_name,argXML._start_line_number)
 
         self.args = remainingArgString
 
@@ -1114,7 +1131,7 @@ class Goal:
 
         canSkip = False
         posts = self.proto.findall('post')
-        if len(posts) > 0:
+        if self.agent.solver.args.execute and len(posts) > 0:
             canSkip = True
             for post in posts:                
                 checkPostBefore = Evaluator(self.agent,self.context,None)
@@ -1174,6 +1191,8 @@ class Goal:
                 for error in self.errors:
                     print 'Goal failed b/c of error: '+error
             print '# END   Pursuing this goal: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+')'
+            if self.agent.verboseMode(1):
+                print self.context.details()
         if self.proto is not None:
             self.agent.endStatement(self.proto,self.context)
 
@@ -1196,6 +1215,7 @@ class Goal:
             context.setupStruct()
         elif stmt.tag == 'find':
             starts = []
+            ambigStarts = False
             for child in stmt:
                 if child.tag == 'in':
                     grandchildren = child.findall('*')
@@ -1206,29 +1226,42 @@ class Goal:
                         for error in evaluator.errors:
                             self.createErrorAt(child,error)
                     else:
-                        starts.append(evaluator.getRvalue())
+                        start = evaluator.getRvalue()
+                        if start != None:
+                            starts.append(evaluator.getRvalue())
+                        elif self.agent.solver.args.execute:
+                            self.createErrorAt(child,'<in> expression could not be evaluated')
+                        else:
+                            ambigStarts = True
                 elif child.tag == 'do':
-                    if self.agent.verboseMode(1):
-                        print 'find/do begins with %d search starting points' % len(starts)
-                    for start in starts:
+                    if ambigStarts:
                         if self.agent.verboseMode(1):
-                            print 'BEGIN find/do at starting point %s' % str(start)
-                        for item in start:
-                            if self.agent.verboseMode(1):
-                                print 'BEGIN find/do at item %s' % str(item)
-                            symbol = self.context.root.lookupTermList(True,[stmt.get('symbol')],self)
-                            ConfigWrap(symbol).assign(item)
-                            self.execute_r(context,child)
-                            if self.agent.verboseMode(1):
-                                print 'END   find/do at item %s' % str(item)
+                            print 'BEGIN find/do at (possible) item with symbol %s' % stmt.get('symbol')
+                        self.execute_r(context,child)
                         if self.agent.verboseMode(1):
-                            print 'END   find/do at starting point %s' % str(start)
+                            print 'END   find/do at (possible) item with symbol %s' % stmt.get('symbol')
+                    else:
+                        if self.agent.verboseMode(1):
+                            print 'find/do begins with %d search starting points' % len(starts)
+                        for start in starts:
+                            if self.agent.verboseMode(1):
+                                print 'BEGIN find/do at starting point %s' % str(start)
+                            for item in start:
+                                if self.agent.verboseMode(1):
+                                    print 'BEGIN find/do at item %s' % str(item)
+                                symbol = self.context.root.lookupTermList(True,[stmt.get('symbol')],self)
+                                ConfigWrap(symbol).assign(item)
+                                self.execute_r(context,child)
+                                if self.agent.verboseMode(1):
+                                    print 'END   find/do at item %s' % str(item)
+                            if self.agent.verboseMode(1):
+                                print 'END   find/do at starting point %s' % str(start)
         elif stmt.tag == 'do':
             for child in stmt:
                 if self.isSuccess():
                     self.execute_r(context,child)
                 else:
-                    print 'DEBUG: find/do is skipping statement at %s:%d' % (child._file_name,child._start_line_number)
+                    print 'WARNING: find/do is skipping statement at %s:%d because a previous statement failed' % (child._file_name,child._start_line_number)
                     print '\n'.join(self.errors)
         elif stmt.tag == 'repeat':
             count = None
