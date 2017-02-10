@@ -247,7 +247,6 @@ import re
 fin = open('cassandra.yaml.original','r')
 fout = open('cassandra.yaml.fixed','w')
 seedString = ','.join([instance.private_ip_address for instance in <set>goal.seeds</set>])
-print 'DEBUG: seedString = %s' % seedString
 for line in fin:
     # using private IP for seeds causes "Unable to gossip with any seeds" failure
     line = re.sub('- seeds: "\S+"','- seeds: "%s"' % seedString,line)
