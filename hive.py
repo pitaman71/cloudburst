@@ -395,7 +395,7 @@ class Agent:
         result.copyFrom(self.solver.state)
 
         result.initPath('Solver.defaultEvalContext',['host','platform'],sys.platform)
-        result.initPath('Solver.defaultEvalContext',['host','uname'],os.uname())
+        result.initPath('Solver.defaultEvalContext',['host','uname'],os.uname()[0])
         result.initPath('Solver.defaultEvalContext',['host','hostname'],socket.gethostname())
         result.initPath('Solver.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
 
