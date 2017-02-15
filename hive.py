@@ -1141,7 +1141,8 @@ class Goal:
                 print 'Searching for prototype for goal '+self.protoName
             proto = self.agent.solver.getDefinitionByTypeAndName('goalProto',self.protoName)        
             if(proto == None):
-                self.createError('No defintion found for goalProto with name '+self.protoName)
+                self.createError('No defintion found for goalProto with name %s' % self.protoName)
+                self.createError(self.toString())
                 return
             self.setProto(proto)
             if self.agent.verboseMode(1):
@@ -1579,8 +1580,6 @@ class ConfigNode:
 
 
     def setupStruct(self):
-        if self.getPath('.') == 'setupCassandraNode.goal.dataStaxYumRepo':
-            raise RuntimeError('GOTCHA')
         if self.fields == None:
             self.fields = dict()
 
