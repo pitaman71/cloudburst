@@ -219,18 +219,39 @@ class Tabulator:
 
         return resultString
 
+class GenericCommand:
+    def __init__(self,solver,name):
+        self.name = name
+        self.config = Config(name,'Solver API command %s' % name,solver)        
+
+    def __len__(self):
+        return self.__dict__.__len__()
+
+    def __iter__(self):
+        return self.__dict__.__iter__()
+
 class Solver:
-    def __init__(self,solverArgs,remainingArgString):
+    def __init__(self):
+        self.name = 'the'
         self.goals = []
         self.goalsByName = dict()
         self.defByTypeThenName = dict()
         self.state = Config('Solver','Solver state',self)
         self.result = True
-        self.args = solverArgs
-        self.remainingArgString = remainingArgString
         self.statementStack = []
         self.stateDefs = []
         self.agents = []
+
+    def parseArgs(self,solverArgs,remainingArgString):
+        self.args = solverArgs
+        self.remainingArgString = remainingArgString
+
+    def hello(self):
+        commandNames = ['list','plan','execute']
+        commands = []
+        for cmdName in commandNames:
+            commands.append(GenericCommand(self,cmdName))
+        return commands
 
     def allocateAgentName(self):
         return str(uuid.uuid4())

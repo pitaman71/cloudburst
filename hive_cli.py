@@ -20,7 +20,8 @@ parser.add_argument('--final','-f',action='count',help='Print final state of hiv
 tup = parser.parse_known_args()
 solverArgs = tup[0]
 
-solver = hive.Solver(solverArgs,tup[1])
+solver = hive.Solver()
+solver.parseArgs(solverArgs,tup[1])
 
 solver.readFile('~/.hive/private.xml',False)
 for programFile in solverArgs.program:
