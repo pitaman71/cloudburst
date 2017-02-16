@@ -23,8 +23,6 @@ def enqueue_output(out, queue):
     out.close()
 # END code from http://stackoverflow.com/questions/375427/non-blocking-read-on-a-subprocess-pipe-in-python
 
-sys.path.append('/usr/local/lib/python2.7/site-packages')
-
 import xml.etree.ElementTree as ElementTree
 import argparse
 import pexpect
@@ -246,12 +244,18 @@ class Solver:
         self.args = solverArgs
         self.remainingArgString = remainingArgString
 
-    def hello(self):
-        commandNames = ['list','plan','execute']
+    def hello(self,agent):
+        goalProtos = [defn for defn in self.defByTypeThenName['goalProto'].values()]
         commands = []
-        for cmdName in commandNames:
-            commands.append(GenericCommand(self,cmdName))
+        for goalProto in goalProtos:
+            goal = Goal(agent)
+            cmdName = goalProto.get('name')
+            goal.cfgTopGoal(cmdName,'')
+            commands.append(goal)
         return commands
+
+    def propose(self,agent,goal):
+        agent.addGoalWithThread(goal)
 
     def allocateAgentName(self):
         return str(uuid.uuid4())
@@ -496,8 +500,16 @@ class Agent:
             self.addGoal(goal)
         return goal
 
+    def addGoalWithThread(self,goal):
+        self.goals.append(goal)
+        goal.agent = self
+        myNode = self.state.root.lookupTermList(True,[goal.name],self)
+        otherNode = goal.context.root.lookupTermList(False,['goal'],self)
+        myNode.copyFrom(otherNode)
+
     def addGoal(self,goal):
         self.goals.append(goal)
+        goal.agent = self
         myNode = self.state.root.lookupTermList(True,[goal.name],self)
         otherNode = goal.context.root.lookupTermList(False,['goal'],self)
         myNode.copyFrom(otherNode)
@@ -677,7 +689,7 @@ class Evaluator:
         self.outcome = EvalOutcomes().setTrue()
 
     def doDefined(self,a):
-        self.value = a.isSuccess() and (a.getLvalue() != None or a.getRvalue() != None)
+        self.value = a.isSuccess() and (a.getRvalue() != None)
         if self.agent.verboseMode(1) and not a.isSuccess():
             for error in a.errors:
                 print error
@@ -1031,16 +1043,22 @@ class Goal:
     def isSuccess(self):
         return len(self.errors) == 0
 
-    def checkPre(self):
+    def checkPre(self,reconfigure = False):
         preChecks = self.proto.findall('pre')
         for preCheck in preChecks:
 #            if args.verbose:
 #                print "Checking "+jsonpickle.encode(preCheck)
             self.checkExpr(preCheck)
         if not self.isSuccess():
-            self.context.reconfigure(self.agent.solver.state,'goal')
-            controller = ConfigController(self.context)
-            self.addError(controller.printText())
+            if reconfigure:
+                self.context.reconfigure(self.agent.solver.state,'goal')
+                controller = ConfigController(self.context)
+                self.addError(controller.printText())
+                return controller
+            else:
+                return False
+        else:
+            return True
 
     def checkPost(self):
         preChecks = self.proto.findall('pre')
@@ -1092,10 +1110,15 @@ class Goal:
         return result
 
     def checkExpr(self,preCheck):
+        if self.agent.verboseMode(1):
+            print 'BEGIN checking <%s> at %s:%d' % (preCheck[0].tag,preCheck[0]._file_name,preCheck[0]._start_line_number)
+
+        success = True
         checkResult = Evaluator(self.agent,self.context,None)
         checkResult.setXML(preCheck[0])
         checkResult.evaluate()
         if not checkResult.isSuccess():
+            success = False
             if self.agent.verboseMode(1) and len(checkResult.errors) > 0:
                 print "ERROR: While checking <%s>," % preCheck.tag
                 for error in checkResult.errors:
@@ -1104,6 +1127,9 @@ class Goal:
                 self.addError(error)
         elif not toBool(checkResult.getRvalue()):
             self.createErrorAt(preCheck,'Pre check failed '+ElementTree.tostring(preCheck))
+            success = False
+        if self.agent.verboseMode(1):
+            print 'END   checking <%s> at %s:%d success: %s' % (preCheck[0].tag,preCheck[0]._file_name,preCheck[0]._start_line_number,'True' if success else 'False')
 
     def subsumedBy(self, other):
         if(self.protoName != other.protoName):
@@ -1199,8 +1225,13 @@ class Goal:
             if self.method == None:
                 self.createError('No method found to solve %s' % self.toString())
 
+        if self.agent.goalsMode(1):
+            print '# RESUME Pursuing this goal after preconditions solved: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+' canSkip:'+('True' if canSkip else 'False')+')'
+
         if not canSkip and self.isSuccess():
-            self.checkPre()
+            ready = self.checkPre(True)
+            if ready != True:
+                self.createError(ready.printText())
 
         if not canSkip and self.method != None and self.isSuccess():
             self.agent.beginStatement(self.method,self.context)
@@ -1778,7 +1809,9 @@ class ConfigNode:
                 element.findCandidatesByTypeName(typeName,values)
 
     def tallyOptions(self,options):
-        if len(self.values) > 0:
+        if self.selected != None or self.assigned != None:
+            pass
+        elif len(self.values) > 0:
             options[self.getPath('.',absolute=False)] = self.values
         if self.fields != None:
             for key,field in self.fields.iteritems():

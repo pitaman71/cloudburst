@@ -545,6 +545,7 @@ import uuid
     </method>
     <goalProto name="ProvisionEC2Cluster" symbol="goal">
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
+        <variable name="clusterName" type="string"/>
         <variable name="config" type="EC2ClusterConfiguration"/>
         <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="ec2Creds" type="EC2Credentials"/>
@@ -556,6 +557,7 @@ import uuid
         <variable name="seeds" type="EC2Instances"/>
         <pre><defined><get>goal.config</get></defined></pre>
         <pre><defined><get>goal.ec2Creds</get></defined></pre>
+        <pre><defined><get>goal.clusterName</get></defined></pre>
     </goalProto>
     <method name="ProvisionEC2Cluster" symbol="goal" targetGoalType="ProvisionEC2Cluster">
         <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
@@ -578,6 +580,7 @@ botoResource.import_key_pair(KeyName='<get>goal.sshCreds.keyName</get>',PublicKe
 </code>
         </python>
         <do><goalCompleted name="AllocateEC2Group">
+            <variable name="clusterName"><get>goal.clusterName</get></variable>
             <variable name="config" type="EC2GroupConfiguration"><get>goal.config.analyticNodes</get></variable>
             <variable name="sshCreds"><get>goal.sshCreds</get></variable>
             <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
@@ -586,6 +589,7 @@ botoResource.import_key_pair(KeyName='<get>goal.sshCreds.keyName</get>',PublicKe
             <variable name="seeds"><get>goal.seeds</get></variable>
         </goalCompleted></do>
         <do><goalCompleted name="AllocateEC2Group">
+            <variable name="clusterName"><get>goal.clusterName</get></variable>
             <variable name="config" type="EC2GroupConfiguration"><get>goal.config.transactionalNodes</get></variable>
             <variable name="sshCreds"><get>goal.sshCreds</get></variable>
             <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
@@ -594,6 +598,7 @@ botoResource.import_key_pair(KeyName='<get>goal.sshCreds.keyName</get>',PublicKe
             <variable name="seeds"><get>goal.seeds</get></variable>
         </goalCompleted></do>
         <do><goalCompleted name="AllocateEC2Group">
+            <variable name="clusterName"><get>goal.clusterName</get></variable>
             <variable name="config" type="EC2GroupConfiguration"><get>goal.config.opsNode</get></variable>
             <variable name="sshCreds"><get>goal.sshCreds</get></variable>
             <variable name="ec2Creds"><get>goal.ec2Creds</get></variable>
@@ -635,12 +640,14 @@ time.sleep(300)
     </method>
     <goalProto name="AllocateEC2Group" symbol="goal">
         <describe locale="en-US">Allocate a cluster of EC2 nodes</describe>
+        <variable name="clusterName"><get>goal.clusterName</get></variable>
         <variable name="config" type="EC2GroupConfiguration"/>
         <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <variable name="instances" type="EC2Instances"/>
         <variable name="seeds" type="EC2Instances"/>
+        <pre><defined><get>goal.clusterName</get></defined></pre>
         <pre><defined><get>goal.config</get></defined></pre>
         <pre><defined><get>goal.ec2Creds</get></defined></pre>
     </goalProto>
@@ -657,10 +664,14 @@ botoResource = botoSession.resource('ec2')
 instances = botoResource.create_instances(KeyName='<get>goal.sshCreds.keyName</get>',InstanceType='<get>goal.config.instanceType</get>',ImageId='<get>goal.config.image</get>', MinCount=<get>goal.config.numNodes</get>, MaxCount=<get>goal.config.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>goal.config.securityGroupId</get>'],AssociatePublicIpAddress=True)])
 if <get>goal.config.isCassandraNode</get>:
     <set>goal.seeds</set>.append(instances[0])
+index = 0
 for instance in instances:
     instance.wait_until_running()
     instance.load()
+    instanceName = '<get>goal.config.instancePrefix</get>%d' % index
+    instance.create_tags(Tags=[{'Key':'Name','Value':instanceName},{'Key':'experoOwner','Value':'<get>goal.ec2Creds.user</get>'},{'Key':'experoClusterName','Value':'<get>goal.clusterName</get>'}])
     <set>goal.instances</set>.append(instance)
+    index += 1
                 </code>
             </python>
         </do>
