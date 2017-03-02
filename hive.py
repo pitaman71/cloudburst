@@ -785,10 +785,13 @@ class Evaluator:
         if self.expr.tail:
             self.tail = self.expr.tail
         innerText = ''
+        preferInnerText = False
         for child in childResults:
             innerText += child.getStringValue()
             if child.tail:
                 innerText += child.tail
+                if child.tail.strip() != '':
+                    preferInnerText = True
 
         if self.agent.verboseMode(2):
             print 'BEGIN evaluating expression '+self.expr.tag+' at '+self.label
@@ -853,6 +856,9 @@ class Evaluator:
             if len(childResults) == 0:
                 pass
                 #self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
+            elif preferInnerText:
+                interpreted = True
+                self.setValue(innerText)
             elif not childResults[0].isSuccess():
                 self.addError(childResults[0].errors[0])
             else:
