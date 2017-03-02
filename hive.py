@@ -6,6 +6,7 @@ import tempfile
 import glob
 import urllib
 import code
+import traceback
 from subprocess import PIPE, Popen
 from threading  import Thread
 
@@ -32,6 +33,63 @@ import re
 
 def toBool(rvalue):
     return rvalue != False and rvalue != 0 and rvalue != 'false' and rvalue != 'False' and rvalue != 'FALSE'
+
+def printLocationAndName(xml):
+    return '%s at %s:%d' % (xml.get('name'),xml._file_name,xml._start_line_number)
+
+class SyndromeException(Exception):
+    def __init__(self,purpose):
+        Exception.__init__(self)
+        self.purpose = purpose
+        self.fileName = None
+        self.lineNumber = None
+        self.errors = []
+        self.traceback = None
+        self.children = []
+
+    def __str__(self):
+        if not self.hasErrors():
+            return ''        
+        result = ''
+        if self.fileName != None:
+            result += 'EXCEPTION %s:%d %s\n' % (self.fileName,self.lineNumber,self.purpose)
+        for errMsg in self.errors:
+            result += errMsg
+            result += '\n'
+        if self.traceback != None:
+            for line in traceback.format_list(self.traceback):
+                result += line
+        for child in self.children:
+            result += str(child)
+        return result
+
+    def banner(self,prefix=None):
+        result = ''
+        if prefix != None:
+            result += prefix
+        result += self.purpose
+        return result
+
+    def addError(self,msg):
+        self.errors.append(msg)
+        self.setTraceback(traceback.extract_stack())
+
+    def setTraceback(self,traceback):
+        self.traceback = traceback
+
+    def setLocation(self,fileName,lineNumber):
+        self.fileName = fileName
+        self.lineNumber = lineNumber
+
+    def addChild(self,child):
+        self.children.append(child)
+
+    def hasErrors(self):
+        return len(self.errors) > 0 or len(self.children) > 0
+
+    def raiseIfHasErrors(self):
+        if self.hasErrors():
+            raise self
 
 class LineNumberingParser(ElementTree.XMLParser):
     def __init__(self,file_name):
@@ -220,7 +278,7 @@ class Tabulator:
 class GenericCommand:
     def __init__(self,solver,name):
         self.name = name
-        self.config = Config(name,'Solver API command %s' % name,solver)        
+        self.config = Config(name,'Solver API command %s' % name,solver)
 
     def __len__(self):
         return self.__dict__.__len__()
@@ -235,6 +293,7 @@ class Solver:
         self.goalsByName = dict()
         self.defByTypeThenName = dict()
         self.state = Config('Solver','Solver state',self)
+        self.state.root.setupStruct()
         self.result = True
         self.statementStack = []
         self.stateDefs = []
@@ -398,10 +457,13 @@ class Agent:
         result = Config(goalName,desc,self.solver)
         result.copyFrom(self.solver.state)
 
+        result.root.setupStruct()
         result.initPath('Solver.defaultEvalContext',['host','platform'],sys.platform)
         result.initPath('Solver.defaultEvalContext',['host','uname'],os.uname()[0])
         result.initPath('Solver.defaultEvalContext',['host','hostname'],socket.gethostname())
         result.initPath('Solver.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
+        if 'HOME' in os.environ:
+            result.initPath('Solver.defaultEvalContext',['user','homeDirectory'],os.environ['HOME'])
 
         return result
 
@@ -510,8 +572,8 @@ class Agent:
     def addGoal(self,goal):
         self.goals.append(goal)
         goal.agent = self
-        myNode = self.state.root.lookupTermList(True,[goal.name],self)
-        otherNode = goal.context.root.lookupTermList(False,['goal'],self)
+        myNode = self.state.root.lookupTermList(True,[goal.name],None)
+        otherNode = goal.context.root.lookupTermList(False,['goal'],None)
         myNode.copyFrom(otherNode)
 
     def solve(self):
@@ -695,12 +757,17 @@ class Evaluator:
                 print error
 
     def evaluate(self):
-        if 'expr' in self.__dict__:
-            self.doXML()
-        elif 'text' in self.__dict__:
-            self.doText()
-        else:
-            self.createError('Must call Evaluator.setXML or Evaluator.setString before calling Evaluator.evaluate')
+        try:
+            if 'expr' in self.__dict__:
+                self.doXML()
+            elif 'text' in self.__dict__:
+                self.doText()
+            else:
+                self.createError('Must call Evaluator.setXML or Evaluator.setString before calling Evaluator.evaluate')
+        except Exception as e:
+            print 'EVALUATION FAILED: '+str(e)
+            self.createError(str(e))
+            self.outcome.setFalse()
 
     def doXML(self):
         childResults = []
@@ -717,6 +784,11 @@ class Evaluator:
                 childResults.append(sub)
         if self.expr.tail:
             self.tail = self.expr.tail
+        innerText = ''
+        for child in childResults:
+            innerText += child.getStringValue()
+            if child.tail:
+                innerText += child.tail
 
         if self.agent.verboseMode(2):
             print 'BEGIN evaluating expression '+self.expr.tag+' at '+self.label
@@ -772,13 +844,7 @@ class Evaluator:
                 self.createError('<'+self.expr.tag+'> must always have a child expression')
             else:
                 interpreted = True
-                text = ''
-                for child in childResults:
-                    text += child.getStringValue()
-                    if child.tail:
-                        text += child.tail
-                    self.outcome = self.outcome and child.outcome
-                self.setValue(text)
+                self.setValue(innerText)
 #        elif self.expr.tag == 'struct':
 #            interpreted = True
 #            self.doDict(self.expr)
@@ -846,14 +912,11 @@ class Evaluator:
                 self.value = (lastReturnCode[1] == 0)
         elif self.expr.tag == 'fileTest':
             testType = self.expr.get('type')
-            if len(childResults) != 1:
-                self.createError('fileTest tag must always have a path as its only child')
-            else:
-                if self.agent.verboseMode(1):
-                    print "TESTING FILE "+childResults[0].value
-                if testType == 'exists':
-                    interpreted = True
-                    self.value = os.path.exists(childResults[0].value)
+            if self.agent.verboseMode(1):
+                print "TESTING FILE "+innerText
+            if testType == 'exists':
+                interpreted = True
+                self.value = os.path.exists(innerText)
         elif self.expr.tag == 'python':
             funcName = None
             if 'name' in self.expr.attrib:
@@ -902,7 +965,7 @@ class Evaluator:
         elif self.expr.tag == 'goalCompleted':
             goalName = self.expr.get('name')
             goalConfig = Config(goalName,'Example of completed goal',self.agent.solver)
-            goalConfig.setup('goal',self.expr)
+            goalConfig.setup('goal',self.expr,self.context)
             foundGoal = self.agent.findGoal(goalName,goalConfig)
             interpreted = True
             if (foundGoal != None):
@@ -953,7 +1016,6 @@ class Goal:
         self.name = self.agent.allocateGoalName(name)
         self.context = self.agent.defaultEvalContext(name,'Evaluation context for goal '+self.name)
         goalNode = self.context.root.lookupTermList(True,['goal'],None)
-        goalNode.setupStruct()
         self.args = remainingArgString
 
     def cfgSubGoal(self,name,parent,argContext,argXML,remainingArgString):
@@ -962,7 +1024,6 @@ class Goal:
         self.parent = parent
         self.context = self.agent.defaultEvalContext(name,'Evaluation context for subgoal '+self.name)
         goalNode = self.context.root.lookupTermList(True,['goal'],None)
-        goalNode.setupStruct()
         if self.agent.verboseMode(1):
             print 'BEGIN configuring goal %s at %s:%d' % (name,argXML._file_name,argXML._start_line_number)
         goalNode.initStateChildren(self.agent.solver,argContext,argXML)
@@ -975,8 +1036,12 @@ class Goal:
         self.proto = xmlProto
 
         # allocate state for <variable> tags under <goalProto>
-        goalNode = self.context.root.lookupTermList(True,['goal'],self.agent)
-        goalNode.initStateChildren(self.agent.solver,self.agent.state,xmlProto)
+        goalNode = self.context.root.lookupTermList(True,['goal'],None)
+
+        try:
+            goalNode.initStateChildren(self.agent.solver,self.context,xmlProto)
+        except Exception as e:
+            self.createErrorAt(xmlProto,'Unable to compute initial state of goal %s\n%s' % (self.name,str(e)))
 
         # handle state overrides from cmdline
         parser = argparse.ArgumentParser()
@@ -1100,7 +1165,7 @@ class Goal:
                         print 'PRECONDITION REQUIRES SUBGOALS '+str(condition._start_line_number)
                     goalName = xml.get('name')
                     goalConfig = Config(goalName,'Subgoal configuration',self.agent.solver)
-                    goalConfig.setup('goal',xml)
+                    goalConfig.setup('goal',xml,self.context)
                     subgoal = Goal(self.agent)
                     subgoal.cfgSubGoal(goalName,self,self.context,xml,self.agent.solver.remainingArgString)
                     subgoal.pursue()
@@ -1179,15 +1244,24 @@ class Goal:
 
         canSkip = False
         posts = self.proto.findall('post')
-        if self.agent.solver.args.execute and len(posts) > 0:
+        if (self.agent.solver.args.execute or self.agent.solver.args.plan) and len(posts) > 0:
             canSkip = True
             for post in posts:                
                 checkPostBefore = Evaluator(self.agent,self.context,None)
                 checkPostBefore.setXML(post[0])
                 checkPostBefore.evaluate()
+                if self.agent.verboseMode(1) or self.agent.goalsMode(1):
+                    print 'POST '+printLocationAndName(post)+' evaluates to %s' % checkPostBefore.value
                 canSkip = canSkip and checkPostBefore.value
             if canSkip and self.agent.verboseMode(1):
                 print 'SKIP '+self.toString()+' because postconditions are already satisfied'
+
+        if not canSkip and self.isSuccess():
+            code = self.solveConditions('pre',self.proto)
+            if code == True:
+                pass
+            elif self.agent.verboseMode(1):
+                print 'UNSOLVABLE preconditions '+printLocationAndName(self.proto)+' to achieve goal '+self.name
 
         if not canSkip and not self.method and self.isSuccess():
             methods = self.agent.solver.getDefinitions('method')
@@ -1196,7 +1270,8 @@ class Goal:
                 return
             methods.reverse()
 
-            # look for methods for which <pre> is already solved
+            # look for matching method definition
+            # if there are multiple candidates, prefer a method for which <pre> is already solved
             dependent = []
             for method in methods:
                 if self.method == None:
@@ -1204,39 +1279,50 @@ class Goal:
                         code = self.evalConditions('pre',method)
                         if code.isTrue():
                             self.method = method
-                            if self.agent.verboseMode(1):
-                                print 'SELECTED '+method.get('name')+' to achieve goal '+self.name
+                            if self.agent.verboseMode(1) or self.agent.goalsMode(1):
+                                print 'SELECTED '+printLocationAndName(method)+' to achieve goal '+self.name
                         elif code.isFalse():
                             if self.agent.verboseMode(1):
-                                print 'REJECTED '+method.get('name')+' to achieve goal '+self.name
+                                print 'REJECTED '+printLocationAndName(method)+' to achieve goal '+self.name
                         else:
                             dependent.append(method)
                             if self.agent.verboseMode(1):
-                                print 'QUEUED   '+method.get('name')+' to achieve goal '+self.name
+                                print 'QUEUED   '+printLocationAndName(method)+' to achieve goal '+self.name
 
-            for method in dependent:
-                if self.method == None:                    
+            if self.method != None:
+                code = self.solveConditions('pre',self.method)
+                if code == True:
+                    pass
+                elif self.agent.verboseMode(1):
+                    print 'UNSOLVABLE preconditions '+printLocationAndName(self.method)+' to achieve goal '+self.name
+            else:
+                for method in dependent:
                     code = self.solveConditions('pre',method)
                     if code == True:
                         self.method = method
                     elif self.agent.verboseMode(1):
-                        print 'UNSOLVABLE '+method.get('name')+' to achieve goal '+self.name
+                        print 'UNSOLVABLE preconditions with '+printLocationAndName(method)+' to achieve goal '+self.name
 
             if self.method == None:
                 self.createError('No method found to solve %s' % self.toString())
-
-        if self.agent.goalsMode(1):
-            print '# RESUME Pursuing this goal after preconditions solved: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+' canSkip:'+('True' if canSkip else 'False')+')'
 
         if not canSkip and self.isSuccess():
             ready = self.checkPre(True)
             if ready != True:
                 self.createError(ready.printText())
 
+        if self.agent.goalsMode(1):
+            print '# RESUME Pursuing this goal after preconditions solved: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+' canSkip:'+('True' if canSkip else 'False')+')'
+
         if not canSkip and self.method != None and self.isSuccess():
             self.agent.beginStatement(self.method,self.context)
             for stmt in self.method.findall('*'):
-                self.execute(stmt)
+                try:
+                    self.execute(stmt)
+                except SyndromeException as e:
+                    print '# FATAL ERROR:'
+                    print str(e)
+                    self.errors.append('Execution failed')
             self.agent.endStatement(self.method,self.context)
 
         if self.agent.goalsMode(1):
@@ -1628,8 +1714,11 @@ class ConfigNode:
         return node
 
     def initStateChildren(self,solver,context,xml):
+        syndrome = SyndromeException("initState(%s)" % self.getPath('.'))
+        syndrome.setLocation(xml._file_name,xml._start_line_number)
+
         if solver.args.verbose > 0:
-            print "BEGIN initState(%s) at %s:%d" % (self.getPath('.'),xml._file_name,xml._start_line_number)
+            print syndrome.banner(prefix='BEGIN ')
         if xml.tag == 'struct' or xml.tag == 'goalCompleted' or xml.tag == 'goalProto':
 #            if self.getValue() == None:
 #                struct = dict()
@@ -1651,7 +1740,9 @@ class ConfigNode:
                 result.setXML(xml)
                 result.evaluate()
                 if not result.isSuccess():
-                    print 'Unable to interpret this XML expression: '+result.errors[0]
+                    syndrome.addError('Cannot evaluate XML expression to initialize property %s using context %s' % (self.getPath('.'),context.root.getPath('.')))
+                    for errMsg in result.errors:
+                        syndrome.addError(errMsg)
                 elif result.getLvalue() != None:
                     self.copyFrom(result.getLvalue())
                 elif result.getRvalue() != None:
@@ -1660,8 +1751,9 @@ class ConfigNode:
         if 'type' in xml.attrib:
             self.typeName = xml.get('type')
 
+        syndrome.raiseIfHasErrors()
         if solver.args.verbose > 0:
-            print "END   initState(%s) at %s:%d" % (self.getPath('.'),xml._file_name,xml._start_line_number)
+            print syndrome.banner(prefix='END ')
 
     def returnStateChildren(self,otherNode,xml):
         if self.rootConfig.solver.verboseMode(2):
@@ -1745,19 +1837,32 @@ class ConfigNode:
         pathTerms = pathString.split('.')
         return self.lookupTermList(create,pathTerms,errHandler)
 
+    def reportError(self,errHandler,errMsg):
+        if errHandler == None:
+            raise RuntimeError(errMsg)
+        elif hasattr(errHandler,'createError'):
+            errHandler.createError(errMsg)
+        elif isinstance(errHandler,list):
+            errHandler.append(errMsg)
+        else:
+            print >>errHandler,errMsg
+
     def lookupTermList(self,create,pathTerms,errHandler):
+        syndrome = SyndromeException('lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms))
+
         result = None
         if self.rootConfig.solver.verboseMode(2):
-            print 'BEGIN lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
+            print syndrome.banner(prefix='BEGIN ')
+
         if(len(pathTerms) == 0):
             result = self
 #            print 'DEBUG: no more path terms'
         elif pathTerms[0] == '':
-            if errHandler != None: errHandler.createError('empty field name at %s' % self.getPath('.'))
+            syndrome.addError('empty field name at %s' % self.getPath('.'))
         elif self.fields == None:
             if len(pathTerms) == 1 and self.selected != None and isinstance(self.selected,object):
                 return getattr(self.selected,pathTerms[0])
-            if errHandler != None: errHandler.createError('%s is not configured as struct with any fields while looking for field %s' % (self.getPath('.'),pathTerms[0]))
+            syndrome.addError('%s is not configured as struct with any fields while looking for field %s' % (self.getPath('.'),pathTerms[0]))
         else:
             if pathTerms[0] not in self.fields:
 #                print 'DEBUG: field '+pathTerms[0]+' is missing from '+self.getPath('.')
@@ -1767,19 +1872,25 @@ class ConfigNode:
                     self.fields[pathTerms[0]] = newNode
                     if len(pathTerms) > 1:
                         newNode.setupStruct()
-                elif errHandler != None:
-                    errHandler.createError('No field named '+pathTerms[0]+' in expression '+self.getPath('.')+' fields include '+(','.join(self.fields.keys())))
-                    return None
                 else:
+                    syndrome.addError('No field named '+pathTerms[0]+' in expression '+self.getPath('.')+' fields include '+(','.join(self.fields.keys())))
                     if self.rootConfig.solver.args.verbose:
                         print 'END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
                     return None
 
 #            print 'DEBUG: found field named '+pathTerms[0]
-            result = self.fields[pathTerms[0]].lookupTermList(create,pathTerms[1:],errHandler)
+            try:
+                result = self.fields[pathTerms[0]].lookupTermList(create,pathTerms[1:],None)
+            except SyndromeException as e:
+                syndrome.addChild(e)
         if self.rootConfig.solver.verboseMode(2):
-            print 'END lookupTermList path: '+self.getPath('.')+' remainder: '+'.'.join(pathTerms)
+            print syndrome.banner(prefix='END ')
             print self.details(False)
+
+        if errHandler == None:
+            syndrome.raiseIfHasErrors()
+        elif syndrome.hasErrors():
+            self.reportError(errHandler,str(syndrome))
         return result
 
     def reconfigure(self,stateConfig,prefixNode):
@@ -1845,8 +1956,9 @@ class Config:
         self.desc = desc
         self.solver = solver
 
-    def setup(self,name,xmlProto):
-        self.root.initStateChildren(self.solver,self.solver.state,xmlProto)
+    def setup(self,name,xmlProto,context):
+        self.root.setupStruct()
+        self.root.initStateChildren(self.solver,context,xmlProto)
 #        print 'DEBUG: initial state of %s is:\n%s' % (self.desc,self.details())
 
     def toString(self):
