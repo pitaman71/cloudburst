@@ -35,7 +35,11 @@ def toBool(rvalue):
     return rvalue != False and rvalue != 0 and rvalue != 'false' and rvalue != 'False' and rvalue != 'FALSE'
 
 def printLocationAndName(xml):
-    return '%s at %s:%d' % (xml.get('name'),xml._file_name,xml._start_line_number)
+    result = xml.tag
+    if 'name' in xml.attrib:
+        result += ' "%s"' % xml.get('name')
+    result += ' at %s:%d' % (xml._file_name,xml._start_line_number)
+    return result
 
 class SyndromeException(Exception):
     def __init__(self,purpose):
@@ -1333,8 +1337,9 @@ class Goal:
 
         if self.agent.goalsMode(1):
             if not self.isSuccess():
+                print 'GOAL FAILURE '+self.toString()
                 for error in self.errors:
-                    print 'Goal failed b/c of error: '+error
+                    print error
             print '# END   Pursuing this goal: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+')'
             if self.agent.verboseMode(1):
                 print self.context.details()
@@ -1491,7 +1496,7 @@ class Goal:
                             if 'onFail' in child.attrib:
                                 onFail = child.get('onFail')
                             if lastCommand[1] != 0 and onFail != 'ignore':
-                                self.createErrorAt(child,'COMMAND RC=%d : %s' % (lastCommand[1],cmd))
+                                self.createErrorAt(child,'shell command returned RC=%d : %s' % (lastCommand[1],cmd))
                                 lines = '\n'.split(lastCommand[0])
                                 for line in lines:
                                     self.createErrorAt(child,line)
