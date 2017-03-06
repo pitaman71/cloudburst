@@ -1,13 +1,17 @@
 import sys
 import os
+import shutil
 import uuid
 import socket
 import tempfile
 import glob
 import urllib
 import code
+import functools
+import json
 from subprocess import PIPE, Popen
-from threading  import Thread
+from threading  import Thread,RLock
+import shipper
 
 try:
     from Queue import Queue, Empty
@@ -33,6 +37,75 @@ import re
 def toBool(rvalue):
     return rvalue != False and rvalue != 0 and rvalue != 'false' and rvalue != 'False' and rvalue != 'FALSE'
 
+def xmlTrackDefnPath(elem,parent,xpathSegment):
+    elem.parent = parent
+    elem.xpathSegment = xpathSegment
+#    print 'DEBUG: BEGIN xmlTrackDefnPath %s at %s:%d' % (elem.tag,elem._file_name,elem._start_line_number)
+    if hasattr(elem,'xpathSegment'):
+        defnPath = []
+        xmlGetDefnPath(elem,defnPath)
+#        print 'PATH %s' % '/'.join(defnPath)
+    parent.expected = dict()
+    for child in elem:
+        if child.tag not in parent.expected:
+            parent.expected[child.tag] = 0
+        parent.expected[child.tag] += 1
+    actual = dict()
+    for child in elem:
+        if child.tag not in actual:
+            actual[child.tag] = 0
+        xpathSegment = None
+        if parent.expected[child.tag] == 1:
+            xpathSegment = [child.tag]
+        else:
+            xpathSegment = [child.tag,str(actual[child.tag])]
+        actual[child.tag] += 1
+        xmlTrackDefnPath(child,elem,xpathSegment)
+#    print 'DEBUG: END   xmlTrackDefnPath %s at %s:%d' % (elem.tag,elem._file_name,elem._start_line_number)
+
+def xmlGetDefnPath(elem,defnPath):
+    if isinstance(elem,ElementTree.Element):
+        if hasattr(elem,'parent'):
+            xmlGetDefnPath(elem.parent,defnPath)
+        if hasattr(elem,'xpathSegment'):
+            for item in elem.xpathSegment:
+                defnPath.append(item)
+    elif hasattr(elem,'getDefnPath'):
+        elem.getDefnPath(defnPath)
+
+def xmlLookupDefnPath(elem,defnPath):
+    if len(defnPath) == 0:
+        return elem
+    if isinstance(elem,ElementTree.Element):
+        tagName = defnPath[0]
+        actual = 0
+        for child in elem:
+            if child.tag == tagName:
+                actual += 1
+                if elem.expected[tagName] == actual:
+                    return xmlLookupDefnPath(child,defnPath[1:])
+        raise RuntimeError('Unable to locate XML node using path %s after %s' % '.'.join(defnPath),obj)
+    else:
+        return lookupRelPath(elem,defnPath)
+
+def lookupRelPath(obj,defnPath):
+    if len(defnPath) == 0:
+        return obj
+    if type(obj) == dict:
+        return lookupRelPath(obj[defnPath[0]],defnPath[1:])
+    if hasattr(obj,defnPath[0]):
+        return lookupRelPath(getattr(obj,defnPath[0]),defnPath[1:])
+    if hasattr(obj,'lookupRelPath'):
+        return obj.lookupRelPath(defnPath)
+    if isinstance(obj,ElementTree.Element):
+        return xmlLookupDefnPath(obj,defnPath)
+    raise RuntimeError('Unable to locate Python object using path %s after %s' % ('/'.join(defnPath),obj))
+
+class Definition:
+    def __init__(self,xml,agency):
+        self.agency = agency
+        self.xml = xml
+
 class LineNumberingParser(ElementTree.XMLParser):
     def __init__(self,file_name):
         self._file_name = file_name
@@ -56,128 +129,110 @@ class LineNumberingParser(ElementTree.XMLParser):
         element._end_byte_index = self.parser.CurrentByteIndex
         return element
 
-class ElementTreeWriter:
-    def __init__(self):
-        self.stack = []
-        self.root = None
+class Shipper(shipper.Shipper):
+    def __init__(self,solver):
+        shipper.Shipper.__init__(self)
+        self.solver = solver
 
-    def begin(self,tag,attrib=dict()):
-        myNode = ElementTree.Element(tag)
-        if(len(self.stack)>0):
-            self.stack[len(self.stack)-1].append(myNode)
+    def prepareForMerge(self):
+        self.defByName[self.getKey(self.solver)] = self.solver
+        self.defOrder.append(self.solver)
+
+    def skipAttribute(self,stack,attr,toObj):
+        return attr == 'lock' or attr == 'args'
+
+    def hasKey(self,obj):
+        return hasattr(obj,'getDefnPath') or isinstance(obj,ElementTree.Element)
+
+    def getKey(self,obj):
+        defnPath = []
+        if isinstance(obj,ElementTree.Element):
+            xmlGetDefnPath(obj,defnPath)
+        elif hasattr(obj,'getDefnPath'):
+            obj.getDefnPath(defnPath)
+        return '/'.join(defnPath)
+
+    def lookupKey(self,key):
+        obj = shipper.Shipper.lookupKey(self,key)
+        if obj != None:
+            return obj
+        defnPath = key.split('/')
+        return self.solver.lookupAbsPath(defnPath)        
+
+    def getType(self,obj):
+        if isinstance(obj,ElementTree.Element):
+            return obj.tag
+        return shipper.Shipper.getType(self,obj)
+
+    def refIsDef(self,stack,attr,toObj):
+        fromObj = None
+        if len(stack) > 1:
+            fromObj = stack[len(stack)-2]
+        if fromObj != None and hasattr(fromObj,'isDefnAttribute') and fromObj.isDefnAttribute(attr):
+            return True
+#        if fromObj.__class__ == hive.Goal and toObj.__class__ == hive.Config:
+#            return True
+#        if toObj.__class__ == hive.ConfigNode:
+#            return True
+        if toObj.__class__ == ElementTree.Element:
+            if toObj.get('isHiveDef') or fromObj.__class__ == ElementTree.Element:
+                return False
+            else:
+                raise RuntimeError('Attempt to ship an object of type Element')
+        return False
+
+    def mergeMembers(self,target,newMembers):
+        if hasattr(target,'mergeMembers'):
+            target.mergeMembers(newMembers)
         else:
-            self.root = myNode
-        for key in attrib.keys():
-            myNode.set(key,attrib[key])
-        self.stack.append(myNode)        
+            shipper.Shipper.mergeMembers(self,target,newMembers)
 
-    def end(self,tag):
-        self.stack.pop()
-
-    def object(self,thing):
-        self.begin(thing.__class__.__name)
-        for attrib,value in thing.__dict__.iteritems():
-            self.subordinate(thing,attrib,value)
-        self.end(thing.__class__.__name)
-
-    def subordinate(self,parentObj,attribName,thing):
-        if type(thing) in (tuple,list):
-            # parentObj attribute is a list
-            for item in thing:
-                self.begin(attribName)
-                self.object(item)
-                self.end(attribName)
-        elif type(thing) in (dict):
-            # parentObj attribute is a plain dict
-            for key in thing.keys():
-                self.begin(attribName,dict(key=key))
-                self.object(thing[key])
-                self.end(attribName)
-        elif __dict__ in thing:
-            # parentObj attribute is another object
-            self.begin(attribName)
-            self.object(thing)
-            self.end(attribName)
+    def create(self,typeName,rep):
+        klass = getattr(sys.modules[__name__],typeName)
+        obj = None
+        if klass == Config:
+            members = rep['__members__']
+            obj = klass(members['name'],members['desc'],self.solver)
+        elif klass == ConfigNode:
+            members = rep['__members__']
+            obj = klass(None,members['name'])
+        elif klass == Agent:
+            obj = klass(self.solver)
         else:
-            # parentObj attribute is a scalar value
-            self.begin(attribName)
-            self.stack[len(self.stack)-1].text = thing
-            self.end(attribName)
-
-class ElementTreeReader:
-    def __init__(self,xmlRoot):
-        self.stack = []
-        self.root = xmlRoot
-        self.named = dict()
-        self.unnamed = []
-
-    def parse(self):
-        self.parseNode(self.root)
-
-    def isClass(self,className):
-        classHandle = getattr(sys.modules[__name__], className)
-        return classHandle != None
-
-    def spawnClass(self,className):
-        classHandle = getattr(sys.modules[__name__], className)
-        if classHandle == None:
-            raise RuntimeError('Cannot find class named '+className)
-        return classHandle()
-
-    def parseNode(self,node):
-        self.stack.append(node)
-        obj = self.spawnClass(node.tag)
-        self.object(obj)
-        self.stack.pop()
+            obj = klass()
         return obj
-
-    def object(self,thing):
-        isGlobal = (len(self.stack) == 0)
-        isNamed = 'name' in thing
-        self.begin(self.__class__.__name)
-        for attrib,value in thing.__dict__.iteritems():
-            self.subordinate(thing,attrib,value)
-        self.end(self.__class__.__name)
-        if isNamed:
-            self.named[thing]
-
-    def subordinate(self,parentObj,attribName,thing):
-        if type(thing) in (tuple,list):
-            # parentObj attribute is a list
-            for childNode in self.stack[len(self.stack)-1]:
-                if childNode.tag == attribName:
-                    childObj = parseNode(childNode)
-                    thing.append(childObj)
-        elif type(thing) in (dict):
-            # parentObj attribute is a plain dict
-            for childNode in self.stack[len(self.stack)-1]:
-                if childNode.tag == attribName:
-                    key = childNode.tag
-                    value = childNode.get('key')
-                    childObj = parseNode(childNode)
-                    thing[key] = childObj
-        elif __dict__ in thing:
-            # parentObj attribute is another object
-            self.begin(attribName)
-            self.object(thing)
-            self.end(attribName)
-        else:
-            # parentObj attribute is a scalar value
-            parentObj.set(attribName,thing)
-
-#    def child(self,thing,attrib):
-#        if type(thing) in (tuple,list):
-#        elif type(thing) in (dict):
-#        elif __dict__ in thing:
-#            self.begin(attrib)
-#            self.object(thing)
-#            self.end(attrib)
-#        else
-#            self.set(attrib,thing)
 
 class Tabulator:
     def __init__(self):
         self.rows = []
+
+    def makeRow(self,index,obj):
+        result = dict()
+        result['type'] = obj.__class__.__name__
+        if hasattr(obj,'showAttributeNames'):
+            for attrName in obj.showAttributeNames():
+                value = getattr(obj,attrName)
+                if isinstance(value,str) or isinstance(value,int) or isinstance(value,float) or isinstance(value,unicode):
+                    result[attrName] = str(value)
+        elif index != None:
+            result['key'] = index
+        return result
+
+    def add(self,obj):
+        if isinstance(obj,dict):
+            for key,value in obj.iteritems():
+                self.rows.append(self.makeRow(key,value))
+        elif isinstance(obj,list):
+            index = 0
+            for item in obj:
+                self.rows.append(self.makeRow(index,item))
+                index += 1
+        elif hasattr(obj,'showAttributeNames'):
+            self.rows.append(dict(attribute='type',value=obj.__class__.__name__))
+            for attrName in obj.showAttributeNames():
+                value = getattr(obj,attrName)
+                if isinstance(value,str) or isinstance(value,int) or isinstance(value,float) or isinstance(value,unicode):
+                    self.rows.append(dict(attribute=attrName,value=str(value)))
 
     def addElement(self,xml):
         if xml.tag == 'goalProto':
@@ -220,7 +275,7 @@ class Tabulator:
 class GenericCommand:
     def __init__(self,solver,name):
         self.name = name
-        self.config = Config(name,'Solver API command %s' % name,solver)        
+        self.config = Config(name,'Agency API command %s' % name,solver)
 
     def __len__(self):
         return self.__dict__.__len__()
@@ -228,34 +283,145 @@ class GenericCommand:
     def __iter__(self):
         return self.__dict__.__iter__()
 
-class Solver:
+class Service:
+    def __init__(self,solver):
+        self.solver = solver
+
+    def hello(self,agent,data):
+        goalProtos = self.solver.getDefinitionsByType('goalProto')
+        commands = []
+        for goalProto in goalProtos:
+            goal = Goal()
+            cmdName = goalProto.get('name')
+            goal.cfgTopGoal(cmdName,'',agent)
+            goal.bindToProto()
+            goal.checkPre(True)
+            commands.append(goal)
+        return commands
+
+    def propose(self,agent,goal):
+        agent.addGoal(goal)
+        reconfig = goal.checkPre(True)
+        if reconfig == True:
+            goal.spawn()
+            return True
+        return reconfig
+
+class Agency:
     def __init__(self):
         self.name = 'the'
-        self.goals = []
-        self.goalsByName = dict()
-        self.defByTypeThenName = dict()
-        self.state = Config('Solver','Solver state',self)
+        self.defByTypeThenName = dict() # locked
+        self.state = Config('Agency','Agency state',self) # locked
         self.result = True
         self.statementStack = []
         self.stateDefs = []
-        self.agents = []
+        self.agentOrder = []
+        self.agentByName = dict()
+        self.lock = RLock()
 
     def parseArgs(self,solverArgs,remainingArgString):
         self.args = solverArgs
         self.remainingArgString = remainingArgString
 
-    def hello(self,agent):
-        goalProtos = [defn for defn in self.defByTypeThenName['goalProto'].values()]
-        commands = []
-        for goalProto in goalProtos:
-            goal = Goal(agent)
-            cmdName = goalProto.get('name')
-            goal.cfgTopGoal(cmdName,'')
-            commands.append(goal)
-        return commands
+    def start(self):
+        self.lock.acquire()
+        if self.verboseMode(1):
+            print 'BEGIN Agency %s starting' % self.name
 
-    def propose(self,agent,goal):
-        agent.addGoalWithThread(goal)
+        self.publicServerName = None
+        if 'SERVER_NAME' in os.environ:
+            self.publicServerName = os.environ['SERVER_NAME']
+        if self.publicServerName == None or self.publicServerName == '':
+            self.publicServerName = socket.getfqdn()        
+        self.defnPath = [os.environ['HOME'],'hiveData']
+        if not os.path.exists('/'.join(self.defnPath)):
+            os.makedirs('/'.join(self.defnPath))
+        globs = glob.glob(os.path.expanduser('/'.join(self.defnPath)))
+        self.persistentPath = globs[0]
+        if os.path.exists('%s/private.xml' % self.persistentPath):
+            self.readFileXML('%s/private.xml' % self.persistentPath,False)
+        if os.path.exists('%s/agency.json' % self.persistentPath):
+            self.readState('%s/agency.json' % self.persistentPath)
+        for programFile in self.args.program:
+            self.readFileXML(programFile)
+
+        if self.verboseMode(1):
+            print 'END   Agency %s starting' % self.name
+        self.lock.release()
+
+    def persist(self):
+        tempFile = '%s/agency.json.in-progress' % self.persistentPath
+        finalFile = '%s/agency.json' % self.persistentPath
+
+        if self.verboseMode(1):
+            print 'BEGIN Agency %s saving persistent state to %s' % (self.name,self.persistentPath)
+
+        self.lock.acquire()
+        fp = open(tempFile,'wt')
+        shipper = Shipper(self)
+        shipper.addValue(self)
+        if self.verboseMode(1):
+            shipper.debugFile = sys.stderr
+        shipper.prepack()
+        print >>fp,json.dumps(shipper.packValues())
+        fp.close()
+        shutil.move(tempFile,finalFile)
+        self.lock.release()
+
+        if self.verboseMode(1):
+            print 'END   Agency %s saving persistent state to %s' % (self.name,self.persistentPath)
+
+    def mergeMembers(self,newMembers):
+        self.state = newMembers['state']
+        self.agentOrder = newMembers['agentOrder']
+        self.agentByName = newMembers['agentByName']
+
+    def finish(self):
+        if self.verboseMode(1):
+            print 'BEGIN Agency %s finishing' % self.name
+        self.lock.acquire()
+        self.persist()
+        self.lock.release()
+        if self.verboseMode(1):
+            print 'END   Agency %s finishing' % self.name
+
+    def getDefnPath(self,defnPath):
+        for item in self.defnPath:
+            defnPath.append(item)
+
+    def getRelPath(self,child,name,relPath):
+        self.getDefnPath(relPath)
+        if self.state == child:
+            relPath.append('state')
+            return
+        if name != None and name in self.defByTypeThenName and self.defByTypeThenName[name] == child:
+            relPath.append('defByTypeThenName')
+            relPath.append(name)
+            return
+        if name != None and name in self.agentByName and self.agentByName[name] == child:
+            relPath.append('agentByName')
+            relPath.append(name)
+            return
+        raise RuntimeError('Malformed parent-child relationship parent=Agency name=%s type=%s' % (name,child))
+
+    def isDefnAttribute(self,attr):
+        return attr == 'state' or attr == 'agentByName'
+
+    def lookupAbsPath(self,absPath):
+        defnPath = []
+        self.getDefnPath(defnPath)
+        while len(defnPath) > 0 and len(absPath) > 0:
+            if defnPath[0] != absPath[0]:
+                return None
+            defnPath = defnPath[1:]
+            absPath = absPath[1:]
+        return lookupRelPath(self,absPath)
+
+    def getDefinitionsByType(self,typeName):
+        self.lock.acquire()
+        result = [defn for defn in self.defByTypeThenName[typeName].values()]
+        self.lock.release()
+        return result
 
     def allocateAgentName(self):
         return str(uuid.uuid4())
@@ -278,7 +444,30 @@ class Solver:
     def finalMode(self):
         return self.args.final != None
 
-    def readFile(self,programFile,mandatory=True):
+    def readState(self,stateFile):
+        if self.verboseMode(1):
+            print 'BEGIN Agency %s loading persistent state from %s' % (self.name,self.persistentPath)
+
+        self.lock.acquire()
+        fp = open(stateFile,'rt')
+        shipper = Shipper(self)
+        shipper.prepareForMerge()
+        rep = json.load(fp)
+
+        if self.verboseMode(1):
+            shipper.debugFile = sys.stderr
+        doppel = shipper.unpack(rep)
+#        print 'DEBUG: loaded %s' % doppel
+        if doppel[0] != self:
+            raise RuntimeError('merge failed in Agency.readState')
+        fp.close()        
+        self.lock.release()
+
+        if self.verboseMode(1):
+            print 'END   Agency %s loading persistent state from %s' % (self.name,self.persistentPath)
+
+
+    def readFileXML(self,programFile,mandatory=True):
         actualPaths = glob.glob(os.path.expanduser(programFile))
         if len(actualPaths) == 0:
             if mandatory:
@@ -293,7 +482,7 @@ class Solver:
                 else:
                     print('Input file does not exist: '+actualPath)
             else:
-                if self.args.verbose > 0:
+                if self.verboseMode(1):
                     print 'Reading '+actualPath
                 xmlDoc = ElementTree.parse(actualPath,parser=LineNumberingParser(actualPath))
                 self.readDefinitions(xmlDoc)
@@ -307,33 +496,46 @@ class Solver:
             if element.tag == 'variable' or element.tag == 'list' or element.tag == 'struct':
                 self.addStateDef(element)
 
+    def appendName(xmlDefn,defnPath):
+        defnPath.append(xmlDefn.get('name'))
+
     def addDefinition(self,xmlDefinition):
         typeName = xmlDefinition.tag
         defName = xmlDefinition.get('name')
+        xmlTrackDefnPath(xmlDefinition,self,['defByTypeThenName',defName])
+        self.lock.acquire()
+        xmlDefinition.set('isHiveDef',True)
+        xmlDefinition.defDefnPath = functools.partial(self.appendName,xmlDefinition)
         if self.args.verbose > 0:
             print 'Definition of %s %s at %s:%d' % (typeName,defName,xmlDefinition._file_name,xmlDefinition._start_line_number)
         if typeName not in self.defByTypeThenName:
             self.defByTypeThenName[typeName] = dict()
         self.defByTypeThenName[typeName][defName] = xmlDefinition
+        self.lock.release()
 
     def addStateDef(self,xmlDef):
         self.stateDefs.append(xmlDef)
 
     def getDefinitions(self,typeName):
         result = []
+        self.lock.acquire()
         if typeName in self.defByTypeThenName:
             for defName,defElement in self.defByTypeThenName[typeName].iteritems():
                 result.append(defElement)
+        self.lock.release()
         return result
 
     def getDefinitionByTypeAndName(self,typeName,defName):
+        result = None
+        self.lock.acquire()
         if typeName in self.defByTypeThenName:
 #            print 'DEBUG: %d definitions of type %s found' % (len(self.defByTypeThenName[typeName].keys()),typeName)
             if defName in self.defByTypeThenName[typeName]:
                 defn = self.defByTypeThenName[typeName][defName]
 #                print 'DEBUG: definition of type %s and name %s found at %s:%d' % (typeName,defName,defn._file_name,defn._start_line_number)
-                return defn
-        return None
+                result = defn
+        self.lock.release()
+        return result
 
     def createError(self,error):
         self.reportError(error)
@@ -346,6 +548,7 @@ class Solver:
         return len(self.errors) > 0
 
     def initialize(self):
+        self.lock.acquire()
         for xml in self.stateDefs:
             position = '%s:%d' % (xml._file_name,xml._start_line_number)
             if self.verboseMode(1):
@@ -353,13 +556,20 @@ class Solver:
             self.state.root.initStateNode(self,self.state,xml)
             if self.verboseMode(1) :
                 print 'END   Processing <state> element at '+position
+        self.lock.release()
 
 #    def terminate(self):
         # nothing to do        
 
+    def copyStateTo(self,result):
+        self.lock.acquire()
+        result.copyFrom(self.state)
+        self.lock.release()
+
     def beginAgent(self):
         agent = Agent(self);
-        self.agents.append(agent)
+        self.agentOrder.append(agent)
+        self.agentByName[agent.name] = agent
 
         if self.args.initial:
             print 'BEGIN INITIAL STATE OF AGENT %s' % agent.name
@@ -368,13 +578,22 @@ class Solver:
 
         return agent
 
+    def locateAgent(self,agentName):
+        if agentName not in self.agentByName:
+            return None
+        return self.agentByName[agentName]
+
     def endAgent(self,agent):
         if self.args.final:
             print 'BEGIN FINAL STATE OF AGENT %s' % agent.name
             print agent.state.details()
             print 'END   FINAL STATE OF AGENT %s' % agent.name
 
-        self.agents.remove(agent)
+        del self.agentByName[agent.name]
+
+#        for agent in self.agentOrder:
+#            print 'Agent %s' % agent
+        self.agentOrder.remove(agent)
 
 class Agent:
     def __init__(self,solver):
@@ -383,9 +602,37 @@ class Agent:
         self.goalsByName = dict()
         self.statementStack = []
         self.name = solver.allocateAgentName()
+        self.program = None
         self.state = Config(self.name,'State of Agent '+self.name,solver)
         self.state.root.setupStruct()        
         self.goalIndex = dict()
+        self.lock = RLock()
+
+    def showAttributeNames(self):
+        return ['name','program']
+
+    def getPrimaryAttributes(self):
+        result = dict()
+        result['type'] = self.__class__.__name__
+        result['name'] = self.name
+        if self.program != None:
+            result['program'] = self.program
+        return result
+
+    def getDefnPath(self,defnPath):
+        self.solver.getRelPath(self,self.name,defnPath)
+
+    def getRelPath(self,child,name,relPath):
+        self.getDefnPath(relPath)
+        if self.state == child:
+            relPath.append('state')
+        if name != None and self.goalsByName[name] == child:
+            relPath.append('goalsByName')
+            relPath.append(name)
+        raise RuntimeError('Malformed parent-child relationship parent=%s name=%s relPath=%s' % (self.toString(),name,''.join(relPath)))
+
+    def isDefnAttribute(self,attr):
+        return attr == 'goalsByName' or attr == 'state'
 
     def allocateGoalName(self,prefix):
         if prefix not in self.goalIndex:
@@ -396,14 +643,34 @@ class Agent:
 
     def defaultEvalContext(self,goalName,desc):
         result = Config(goalName,desc,self.solver)
-        result.copyFrom(self.solver.state)
+        self.solver.copyStateTo(result)
 
-        result.initPath('Solver.defaultEvalContext',['host','platform'],sys.platform)
-        result.initPath('Solver.defaultEvalContext',['host','uname'],os.uname()[0])
-        result.initPath('Solver.defaultEvalContext',['host','hostname'],socket.gethostname())
-        result.initPath('Solver.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
+        result.initPath('Agency.defaultEvalContext',['host','platform'],sys.platform)
+        result.initPath('Agency.defaultEvalContext',['host','uname'],os.uname()[0])
+        result.initPath('Agency.defaultEvalContext',['host','hostname'],socket.gethostname())
+        result.initPath('Agency.defaultEvalContext',['host','hostip'],socket.gethostbyname(socket.gethostname()))
 
         return result
+
+    def loadProgram(self,programName):
+        self.program = programName
+        if self.verboseMode(1):
+            print 'BEGIN Agent %s loading program %s' % (self.name,programName)
+        xml = self.solver.getDefinitionByTypeAndName('agent',programName)
+        if xml == None:
+            raise RuntimeError('<agent name="%s"/> is undefined' % programName)
+        self.state.setup(self.name,xml)
+        if self.verboseMode(1):
+            print 'END   Agent %s loading program %s' % (self.name,programName)
+
+    def doEvent(self,eventName):
+        print 'BEGIN Agent %s doEvent %s' % (self.name,eventName)
+        goal = Goal()
+        cmdName = goalProto.get('name')
+        goal.cfgTopGoal(cmdName,'',agent)
+        goal.pursue()
+        print 'END   Agent %s doEvent %s' % (self.name,eventName)
+        return goal
 
     def verboseMode(self,level):
         return self.solver.args.verbose != None and self.solver.args.verbose >= level
@@ -494,25 +761,21 @@ class Agent:
         return len(goals)>0
 
     def addTopGoalByName(self,goalName):
-        goal = Goal(self)
-        goal.cfgTopGoal(goalName,self.solver.remainingArgString)
+        goal = Goal()
+        goal.cfgTopGoal(goalName,self.solver.remainingArgString,self)
         if not self.hasGoal(goal):            
             self.addGoal(goal)
         return goal
 
-    def addGoalWithThread(self,goal):
-        self.goals.append(goal)
-        goal.agent = self
-        myNode = self.state.root.lookupTermList(True,[goal.name],self)
-        otherNode = goal.context.root.lookupTermList(False,['goal'],self)
-        myNode.copyFrom(otherNode)
-
     def addGoal(self,goal):
+        self.lock.acquire()
         self.goals.append(goal)
         goal.agent = self
+#        print 'DEBUG: Goal has properties: %s' % str(goal.__dict__)
         myNode = self.state.root.lookupTermList(True,[goal.name],self)
         otherNode = goal.context.root.lookupTermList(False,['goal'],self)
         myNode.copyFrom(otherNode)
+        self.lock.release()
 
     def solve(self):
         for goal in self.goals:
@@ -909,8 +1172,8 @@ class Evaluator:
                 self.value = True
                 self.outcome = EvalOutcomes().setTrue()
             elif self.pursue != None:
-                subgoal = Goal(self.agent)
-                subgoal.cfgSubGoal(goalName,self.pursue,self.context,self.expr,self.agent.solver.remainingArgString)
+                subgoal = Goal()
+                subgoal.cfgSubGoal(goalName,self.pursue,self.context,self.expr,self.agent.solver.remainingArgString,self.agent)
                 subgoal.pursue()
                 if not subgoal.isSuccess():
                     self.value = False
@@ -939,16 +1202,20 @@ class Evaluator:
             self.value = self.text
 
 class Goal:
-    def __init__(self,agent):
+    def __init__(self):
         self.proto = None
         self.method = None
         self.variables = []
         self.errors = []
         self.tempFiles = []
-        self.agent = agent
+        self.agent = None
         self.parent = None
 
-    def cfgTopGoal(self,name,remainingArgString):
+    def getDefnPath(self,defnPath):
+        self.agent.getRelPath(self,self.name,defnPath)
+
+    def cfgTopGoal(self,name,remainingArgString,agent):
+        self.agent = agent
         self.protoName = name
         self.name = self.agent.allocateGoalName(name)
         self.context = self.agent.defaultEvalContext(name,'Evaluation context for goal '+self.name)
@@ -956,7 +1223,8 @@ class Goal:
         goalNode.setupStruct()
         self.args = remainingArgString
 
-    def cfgSubGoal(self,name,parent,argContext,argXML,remainingArgString):
+    def cfgSubGoal(self,name,parent,argContext,argXML,remainingArgString,agent):
+        self.agent = agent
         self.protoName = name
         self.name = self.agent.allocateGoalName(name)
         self.parent = parent
@@ -1101,8 +1369,8 @@ class Goal:
                     goalName = xml.get('name')
                     goalConfig = Config(goalName,'Subgoal configuration',self.agent.solver)
                     goalConfig.setup('goal',xml)
-                    subgoal = Goal(self.agent)
-                    subgoal.cfgSubGoal(goalName,self,self.context,xml,self.agent.solver.remainingArgString)
+                    subgoal = Goal()
+                    subgoal.cfgSubGoal(goalName,self,self.context,xml,self.agent.solver.remainingArgString,self.agent)
                     subgoal.pursue()
                     if not subgoal.isSuccess():
                         result = False
@@ -1156,16 +1424,13 @@ class Goal:
             result += ' %s:%d' % (self.method._file_name,self.method._start_line_number)
         return result
 
-    def pursue(self):
-        if self.agent.goalsMode(1):
-            print '# BEGIN Pursuing this goal: '+self.toString()
-            if self.agent.verboseMode(1):
-                print self.context.details()
-
-        if not self.proto and self.isSuccess():
+    def bindToProto(self):
+        if self.proto == None:
             if self.agent.verboseMode(1):
                 print 'Searching for prototype for goal '+self.protoName
-            proto = self.agent.solver.getDefinitionByTypeAndName('goalProto',self.protoName)        
+            proto = self.agent.getDefinitionByTypeAndName('event',self.protoName)
+            if proto == None:
+                proto = self.agent.solver.getDefinitionByTypeAndName('goalProto',self.protoName)        
             if(proto == None):
                 self.createError('No defintion found for goalProto with name %s' % self.protoName)
                 self.createError(self.toString())
@@ -1173,6 +1438,15 @@ class Goal:
             self.setProto(proto)
             if self.agent.verboseMode(1):
                 print 'Goal %s uses prototype %s at %s:%d' % (self.name,self.proto.get('name'),self.proto._file_name,self.proto._start_line_number)
+
+    def pursue(self):
+        if self.agent.goalsMode(1):
+            print '# BEGIN Pursuing this goal: '+self.toString()
+            if self.agent.verboseMode(1):
+                print self.context.details()
+
+        if not self.proto and self.isSuccess():
+            self.bindToProto()
 
         if self.proto is not None:
             self.agent.beginStatement(self.proto,self.context)
@@ -1443,8 +1717,8 @@ class Goal:
             goalName = stmt.get('name')
 #            goalConfig = Config(goalName,'Subgoal configuration',self.agent.solver)
 #            goalConfig.setup('goal',stmt)
-            subgoal = Goal(self.agent)
-            subgoal.cfgSubGoal(goalName,self,self.context,stmt,self.agent.solver.remainingArgString)
+            subgoal = Goal()
+            subgoal.cfgSubGoal(goalName,self,self.context,stmt,self.agent.solver.remainingArgString,self.agent)
             subgoal.pursue()
             if not subgoal.isSuccess():
                 result = False
@@ -1458,6 +1732,9 @@ class Goal:
             if self.agent.verboseMode(1):
                 print 'RETURN CONTEXT '+contextPre.getPath('.')
         self.agent.endStatement(stmt,self.context)
+
+    def spawnThread(self):
+        thread = Thread(functools.partial(self.pursue,self=self))
 
 class Task:
     def __init__(self,goal):
@@ -1539,6 +1816,15 @@ class ConfigNode:
         self.elements = None
         self.parent = None
         self.typeName = None
+
+    def lookupRelPath(self,defnPath):
+        if len(defnPath) == 0:
+            return self
+        if self.elements != None and defnPath[0] in self.elements:
+            return self.elements[defnPath[0]].lookupRelPath(defnPath[1:])
+        if self.fields != None and defnPath[0] in self.fields:
+            return self.fields[defnPath[0]].lookupRelPath(defnPath[1:])
+        raise RuntimeError('Unable to locate ConfigNode after %s using sufix path %s' % (self.getPath('.'),'.'.join(defnPath)))
 
     def __len__(self):
         if self.elements != None and len(self.elements) > 0:
@@ -1841,6 +2127,9 @@ class ConfigNode:
 
 class Config:
     def __init__(self,name,desc,solver):
+        if name == None:
+            raise RuntimeError('Cannot use name=None')
+        self.name = name
         self.root = ConfigNode(self,name)
         self.desc = desc
         self.solver = solver

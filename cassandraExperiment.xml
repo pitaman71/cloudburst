@@ -471,7 +471,7 @@ for line in fin:
         <do>
             <shell name="doShell">
                 <label>install</label>
-                <send name="command" onFail="stop">pip install <get>goal.toolName</get></send>
+                <send name="command" onFail="stop">pip install <get>goal.toolName</get> --ignore-installed</send>
             </shell>
         </do>
     </method>
@@ -787,4 +787,22 @@ for instance in instances:
             </shell>
         </do>
     </method>
+    <agent name="helloWorld">
+        <variable name="file" type="localFilePath"/>
+        <variable name="count" type="int">0</variable>
+        <event name="start">
+            <tempFile name="file">
+                Hello, World! (write has not been called yet)
+            </tempFile>
+        </event>
+        <event name="write">
+            <shell><send>cat <get>agent.file</get></send></shell>
+        </event>
+        <event name="print">
+            <shell><send>cat <get>agent.file</get></send></shell>
+        </event>
+        <event name="finish">
+            <shell><send>rm -f <get>agent.file</get></send></shell>
+        </event>
+    </agent>
 </hive>

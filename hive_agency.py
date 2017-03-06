@@ -6,10 +6,19 @@ import os
 import time
 import hive
 import argparse
+import inspect
+import traceback
+import socket
+import xml.etree.ElementTree as ElementTree
 
 from flask import Flask, Response, request
 from flask import send_from_directory
+import pickle
 import jsonpickle
+import StringIO
+
+
+solver = hive.Agency()
 
 parser = argparse.ArgumentParser(description="Hive Command-Line Interpreter")
 parser.add_argument('program',nargs='+')
@@ -30,38 +39,42 @@ parser.parse_args('--daemon')
 tup = parser.parse_known_args()
 solverArgs = tup[0]
 
-solver = hive.Solver()
 solver.parseArgs(solverArgs,tup[1])
 agent = None
 
-solver.readFile('~/.hive/private.xml',False)
-for programFile in solverArgs.program:
-    solver.readFile(programFile)
-
+solver.start()
 solver.initialize()
+
+service = hive.Service(solver)
 
 app = Flask(__name__, static_url_path='/Volumes/Sandbox/hive', static_folder='public')
 
-@app.route('/api/hello', methods=['GET'])
-def hello_handler():
-    return Response(
-        jsonpickle.encode(solver.hello(agent)),
-        mimetype='application/json',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Access-Control-Allow-Origin': '*'
-        }
-    )
+@app.route('/api/<commandName>', methods=['GET','POST'])
+def command_handler(commandName):
+    reqData = None
+    if request.data != None and request.data != '':
+        unpickler = hive.Shipper(solver)
+        rep = json.loads(request.data)
+        unpickler.debugFile = sys.stderr
+        reqData = unpickler.unpack(rep)
+        print 'DEBUG: BEGIN request %s' % type(reqData)
+        print request.data
+        print 'DEBUG: END   request'
 
-@app.route('/api/propose', methods=['POST'])
-def propose_cmd():
-    print 'DEBUG: BEGIN request'
-    print jsonpickle.encode(request.get_data())
-    print 'DEBUG: END   request'
 
-    command = jsonpickle.decode(request.data)
+    result = getattr(service,commandName).__call__(agent,reqData)
+    respData = None
+    if result != None:
+        pickler = hive.Shipper(solver)
+        pickler.debugFile = sys.stderr
+        pickler.addValue(result)
+        pickler.prepack()
+        respData = json.dumps(pickler.packValues())
+    print 'DEBUG: BEGIN response %s' % (type(respData))
+    print respData
+    print 'DEBUG: END   response'
     return Response(
-        jsonpickle.encode(solver.propose(agent,command)),
+        respData,
         mimetype='application/json',
         headers={
             'Cache-Control': 'no-cache',
