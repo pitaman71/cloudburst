@@ -4,6 +4,8 @@ import traceback
 import task
 import logging
 
+import sys
+
 class Shipper:
     """ Base class for a reversible object packing/unpacking process that can be used to implement object persistence or
     shared consistency. The "pack" operation takes a Python data structure and converts it to a serialization-friendly 
@@ -21,7 +23,7 @@ class Shipper:
     The class also provides a debug facility, which can be activated by client code setting Shipper.debugFile to
     point to an output stream such as sys.stderr. 
     """
-    def __init__(self):
+    def __init__(self,module=None):
         self.status = dict()
         self.pointers = dict()
         self.defByName = dict()
@@ -29,6 +31,9 @@ class Shipper:
         self.values = []
         self.defnPathStack = []
         self.serializationLog = logging.getLogger("%s.%s" % (self.__class__.__name__,'serialization'))
+        self.module = module
+        if module == None:
+            self.module = sys.modules[__name__]
 
     def hasKey(self,obj):
         return False
@@ -68,8 +73,11 @@ class Shipper:
         self.pointers = dict()
 
     def create(self,typeName,rep):
-        klass = getattr(sys.modules[__name__], typeName)
+        if not hasattr(self.module,typeName):
+            return None
+        klass = getattr(self.module, typeName)
         obj = klass()
+        return obj
 
     def packDefinitions(self):
         rep = []
@@ -91,6 +99,27 @@ class Shipper:
         tmp = self.unpackObject(rep,[])
         self.reset()
         return self.postUnpackObject(tmp,False,[])
+
+    def unpackByType(self,rep,stack,typeName):
+        obj = None
+        if typeName == 'StackRefType':
+            obj = stack[rep['depth']]
+        else:
+            obj = self.create(typeName,rep)
+            if obj == None:
+                raise RuntimeError('Cannot locate class definition for %s' % typeName)
+            stack.append(obj)
+            members = dict()
+            if 'members' in rep:
+                for key,value in rep['members'].iteritems():
+                    self.debugMessage('unpackObject key %s' % str(key))
+                    members[key] = self.unpackObject(value,stack)
+            obj.__dict__ = members
+            if '__def__' in rep:
+                self.defByName[rep['__def__']] = obj
+                self.defByOrder.append(obj)
+            stack.pop()
+        return obj
 
     def unpackObject(self,rep,stack):
         objType = str(rep)

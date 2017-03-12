@@ -777,19 +777,23 @@ class Agent:
         isSuccess = True
         for preCheck in preChecks:
             stmt = preCheck[0]
-            print 'DEBUG: %s:%d <%s> BEGIN checking' % (stmt._file_name,stmt._start_line_number,stmt.tag)
+#            print 'DEBUG: %s:%d <%s> BEGIN checking' % (stmt._file_name,stmt._start_line_number,stmt.tag)
             evalResult = Evaluator(self,self.state,None,False)
             evalResult.setXML(stmt)
             evalResult.evaluate()
-            print 'DEBUG: %s:%d <%s> END   checking' % (stmt._file_name,stmt._start_line_number,stmt.tag)
+#            print 'DEBUG: %s:%d <%s> END   checking' % (stmt._file_name,stmt._start_line_number,stmt.tag)
             if not evalResult.getOutcome().isTrue():
-                print 'DEBUG: %s:%d <%s> failed (1)' % (stmt._file_name,stmt._start_line_number,stmt.tag)
+                pass
+#                print 'DEBUG: %s:%d <%s> failed (1)' % (stmt._file_name,stmt._start_line_number,stmt.tag)
             elif evalResult.getRvalue() == None:
-                print 'DEBUG: %s:%d <%s> failed (2)' % (stmt._file_name,stmt._start_line_number,stmt.tag)
+                pass
+#                print 'DEBUG: %s:%d <%s> failed (2)' % (stmt._file_name,stmt._start_line_number,stmt.tag)
             elif evalResult.getRvalue() == False:
-                print 'DEBUG: %s:%d <%s> failed (3)' % (stmt._file_name,stmt._start_line_number,stmt.tag)
+                pass
+#                print 'DEBUG: %s:%d <%s> failed (3)' % (stmt._file_name,stmt._start_line_number,stmt.tag)
             else:
-                print 'DEBUG: %s:%d <%s> passed' % (stmt._file_name,stmt._start_line_number,stmt.tag)
+                pass
+#                print 'DEBUG: %s:%d <%s> passed' % (stmt._file_name,stmt._start_line_number,stmt.tag)
             isSuccess = isSuccess and evalResult.getOutcome().isTrue() and evalResult.getRvalue()
         if not isSuccess:
             self.state.reconfigure(self.solver.state,'agent')
@@ -1048,9 +1052,7 @@ class Evaluator:
 
     def getRvalue(self):
         result = self.value
-        print 'DEBUG: getRvalue starts with %s' % (result)
         while isinstance(result,ConfigNode):
-            print 'DEBUG: getRvalue %s leads to %s' % (result,result.getValue())
             result = result.getValue()
         return result
 
@@ -2389,7 +2391,6 @@ class Config:
 
     def handleStateOverrides(self,agent,args,executeMode):
         # handle state overrides from cmdline
-        print 'DEBUG: extra args include %s' % args
         errors = []
         parser = argparse.ArgumentParser()
         parser.add_argument('assignments',nargs='*')
@@ -2398,9 +2399,9 @@ class Config:
             tokens = assignment.split('=')
             if len(tokens) != 2:
                 errors += ['Expected goal assignments but instead found command line argument: '+assignment]
-                print 'DEBUG: skipped command-line argument '+assignment
+#                print 'DEBUG: skipped command-line argument '+assignment
             else:
-                print 'DEBUG: parsed command-line assignment of '+tokens[0]+' := '+tokens[1]
+#                print 'DEBUG: parsed command-line assignment of '+tokens[0]+' := '+tokens[1]
                 lhs = self.root.lookupTermList(False,tokens[0].split('.'),Evaluator(agent,self,None,executeMode).setString(tokens[1]))
                 rhs = Evaluator(agent,self,None,executeMode)
                 rhs.setString(tokens[1])
@@ -2410,7 +2411,7 @@ class Config:
                 elif not rhs.isSuccess():
                     errors += rhs.errors
                 else:
-                    print 'DEBUG: assign '+lhs.getPath('.')+' := '+rhs.value
+ #                   print 'DEBUG: assign '+lhs.getPath('.')+' := '+rhs.value
                     lhs.setValue(rhs.value)
 
         if agent.verboseMode(1):
