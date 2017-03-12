@@ -13,9 +13,6 @@ import xml.etree.ElementTree as ElementTree
 
 from flask import Flask, Response, request
 from flask import send_from_directory
-import pickle
-import jsonpickle
-import StringIO
 
 
 solver = hive.Agency()

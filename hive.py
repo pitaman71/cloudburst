@@ -32,7 +32,6 @@ import xml.etree.ElementTree as ElementTree
 import argparse
 import pexpect
 import copy
-import jsonpickle
 import re
 
 Element = ElementTree.Element
@@ -1503,8 +1502,6 @@ class Goal:
     def checkPre(self,reconfigure = False):
         preChecks = self.proto.findall('pre')
         for preCheck in preChecks:
-#            if args.verbose:
-#                print "Checking "+jsonpickle.encode(preCheck)
             self.checkExpr(preCheck)
         if not self.isSuccess():
             if reconfigure:
@@ -1520,8 +1517,6 @@ class Goal:
     def checkPost(self):
         preChecks = self.proto.findall('pre')
         for preCheck in preChecks:
-#            if args.verbose:
-#                print "Checking "+jsonpickle.encode(preCheck)
             self.checkExpr(preCheck)
 
     def evalConditions(self,condTag,xml):
@@ -2062,7 +2057,6 @@ class ConfigNode:
                 self.elements.append(otherElement)
         if other.selected != None:
             self.selected = other.selected
-#            print 'copyFrom '+self.getPath('.')+' := '+other.getPath('.')+' == '+jsonpickle.encode(self.selected)
         if other.fields != None:
             if self.fields == None:
                 self.fields = dict()
