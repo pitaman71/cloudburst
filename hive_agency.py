@@ -40,7 +40,6 @@ solver.parseArgs(solverArgs,tup[1])
 agent = None
 
 solver.start()
-solver.initialize()
 
 service = hive.Service(solver)
 

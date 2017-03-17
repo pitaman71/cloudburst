@@ -3,6 +3,7 @@ import sys
 import traceback
 import task
 import logging
+import datetime
 
 import sys
 
@@ -169,7 +170,7 @@ class Shipper:
 #                        print 'DEFINE %s' % rep['__def__']
                     self.defByName[rep['__def__']] = obj
                     self.defOrder.append(obj)
-                if created and hasattr(obj,'afterUnpack'):
+                if created and hasattr(created,'afterUnpack'):
                     created.afterUnpack()
                 stack.pop()
             else:
@@ -243,14 +244,22 @@ class Shipper:
     def skipAttribute(self,stack,attr,toObj):
         return False
 
+    def packAsVoid(self,obj):
+        return False
+
     def packAsScalar(self,obj):
-        return isinstance(obj,bool) or isinstance(obj,str) or isinstance(obj,int) or isinstance(obj,float) or isinstance(obj,unicode)
+        return isinstance(obj,bool) or isinstance(obj,str) or isinstance(obj,int) or isinstance(obj,float) or isinstance(obj,unicode) or isinstance(obj,datetime.datetime)
 
     def prepackObject(self,obj,nextRefIsDef,stack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
-        myTask = task.Task(('prepackObject of type %s' % objType),logger=self.serializationLog)
+        myTask = task.Task('prepackObject of type %s' % objType,logger=self.serializationLog)
+        if objType == 'ResourceModel':
+            message = 'ResourceModel object serialized\n'
+            for i in range(0,len(stack)):
+                message += '    value %s\n' % (stack[len(stack)-i-1])
+            raise RuntimeError(message)
 
-        if obj not in stack:
+        if id(obj) not in [id(item) for item in stack]:
             stack.append(obj)
             if obj == None:
                 pass
@@ -264,8 +273,11 @@ class Shipper:
                     else:
                         myTask.info('prepackObject follows key %s' % str(key))
                         self.prepackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+            elif self.packAsVoid(obj):
+                myTask.info('prepackObject void %s' % str(obj).decode('utf8'))
+                pass
             elif self.packAsScalar(obj):
-                myTask.info('prepackObject value %s' % str(obj))
+                myTask.info('prepackObject value %s' % str(obj).decode('utf8'))
                 pass
             elif self.hasKey(obj):
                 key = self.getKey(obj)
@@ -283,7 +295,8 @@ class Shipper:
                 self.pointers[id(obj)] = True
                 if not hasattr(obj,'__dict__'):
                     print 'WARNING: this object is not really an object! %s' % obj
-                self.prepackObject(obj.__dict__,False,stack)
+                else:
+                    self.prepackObject(obj.__dict__,False,stack)
             stack.pop()
 
     def packObject(self,obj,nextRefIsDef,stack):
@@ -321,8 +334,11 @@ class Shipper:
                     else:
                         myTask.info('packObject follows key %s' % str(key))
                         result[key] = self.packObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+            elif self.packAsVoid(obj):
+                myTask.info('packObject void %s' % str(obj).decode('utf8'))
+                result = None
             elif self.packAsScalar(obj):
-                myTask.info('packObject value %s' % str(obj))
+                myTask.info('packObject value %s' % str(obj).decode('utf8'))
                 result = obj
             elif not hasattr(obj,'__dict__'):
                 raise RuntimeError('Cannot pack object of type %s' % type(obj))

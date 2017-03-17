@@ -57,8 +57,6 @@ if(solverArgs.subcommand == 'load'):
     solver.readFileXML(solverArgs.program)
     success = True
 
-solver.initialize()
-
 if(solverArgs.subcommand == 'list'):
     tabulator = hive.Tabulator()
     goalProtos = solver.getDefinitions('goalProto')
@@ -82,7 +80,7 @@ elif solverArgs.subcommand == 'event':
     agent = solver.locateAgent(solverArgs.agent)
     if agent == None:
         print 'Unable to locate agent named %s' % solverArgs.agent
-    goal = agent.doEvent(solverArgs.event)
+    goal = agent.doEvent(solverArgs.event,True)
     success = not goal.hasErrors()
 elif solverArgs.subcommand == 'kill':
     agent = solver.locateAgent(solverArgs.agent)
@@ -107,9 +105,9 @@ elif solverArgs.subcommand == 'inspect':
         print solver.inspect(target)
         success = True
 elif solverArgs.subcommand == 'plan' or solverArgs.subcommand == 'execute':
+    executeMode = solverArgs.subcommand == 'execute'
     agent = solver.locateAgent(solverArgs.agent)
-    topGoal = agent.addTopGoalByName(solverArgs.goal)
-    topGoal.pursue(solverArgs.subcommand == 'execute')
+    topGoal = agent.doEvent(solverArgs.goal,executeMode)
     if topGoal != None and not topGoal.isSuccess():
         for error in topGoal.errors:
             print 'ERROR: '+error
