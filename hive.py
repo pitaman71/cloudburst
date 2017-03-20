@@ -28,6 +28,22 @@ def enqueue_output(out, queue):
     out.close()
 # END code from http://stackoverflow.com/questions/375427/non-blocking-read-on-a-subprocess-pipe-in-python
 
+def try_clone_method(obj):
+    if isinstance(obj,list):
+        result = []
+        for item in obj:
+            result.append(try_clone_method(item))
+        return result
+    elif isinstance(obj,dict):
+        result = dict()
+        for key,value in obj.iteritems():
+            result[key] = try_clone_method(value)
+        return result
+    elif hasattr(obj,'clone'):
+        return obj.clone()
+    else:
+        return obj
+
 import xml.etree.ElementTree as ElementTree
 import argparse
 import pexpect
@@ -66,6 +82,8 @@ def xmlTrackDefnPath(elem,parent,xpathSegment):
     if not hasattr(elem,'expected'):
         elem.expected = dict()
     for child in elem:
+        if not isinstance(child,Element):
+            raise RuntimeError('FATAL: child of XML Element should also be Element but it is %s' % str(child))
         if child.tag not in elem.expected:
             elem.expected[child.tag] = 0
         elem.expected[child.tag] += 1
@@ -173,8 +191,23 @@ class Shipper(shipper.Shipper):
         self.defByName[self.getKey(self.solver)] = self.solver
         self.defOrder.append(self.solver)
 
-    def skipAttribute(self,stack,attr,toObj):
-        return attr == 'lock' or attr == 'args'
+    def attributeOrder(self,obj,stack):
+        if not isinstance(obj,dict):
+            raise RuntimeError('Expected an object of type dict in call to attributeOrder but received %s' % type(obj))
+
+#        if 'programName' in obj:
+#            print 'DEBUG: Called attributeOrder for %s' % obj
+#            print 'DEBUG: stack is %s' % '\n'.join([str(obj) for obj in stack])
+
+        if len(stack) > 1 and hasattr(stack[len(stack)-2],'attributeOrder'):
+            return stack[len(stack)-2].attributeOrder()
+
+#        if 'programName' in obj:
+#            print 'DEBUG: Skipping custom attributeOrder for %s' % obj
+#            print 'DEBUG: stack is %s' % '\n'.join([str(obj) for obj in stack])
+#        else:
+#            print 'Skipping attributeOrder for %s' % obj['__type__']
+        return shipper.Shipper.attributeOrder(self,obj,stack)
 
     def hasKey(self,obj):
         if hasattr(obj,'hasDefnPath'):
@@ -225,21 +258,23 @@ class Shipper(shipper.Shipper):
             shipper.Shipper.mergeMembers(self,target,newMembers)
 
     def create(self,typeName,rep):
-        klass = getattr(sys.modules[__name__],typeName)
+        klass = None
         obj = None
-        if klass == Config:
-            members = rep['__members__']
-            obj = klass(members['name'],members['desc'],self.solver)
-        elif klass == ConfigNode:
-            members = rep['__members__']
-            obj = klass(None,members['name'])
-        elif klass == Agent:
-            obj = klass(self.solver)
-        elif klass == Element:
-            members = rep['__members__']
-            obj = klass(members['tag'])
-        else:
-            obj = klass()
+        if hasattr(sys.modules[__name__],typeName):
+            klass = getattr(sys.modules[__name__],typeName)
+            if klass == Config:
+                members = rep['__members__']
+                obj = klass(members['name'],members['desc'],self.solver)
+            elif klass == ConfigNode:
+                members = rep['__members__']
+                obj = klass(None,members['name'])
+            elif klass == Agent:
+                obj = klass(self.solver)
+            elif klass == Element:
+                members = rep['__members__']
+                obj = klass(members['tag'])
+            else:
+                obj = klass()
         return obj
 
     def packAsVoid(self,obj):
@@ -249,17 +284,36 @@ class Tabulator:
     def __init__(self):
         self.rows = []
 
-    def makeRow(self,index,obj):
-        result = dict()
-#        result['type'] = obj.__class__.__name__
-        if hasattr(obj,'showAttributeNames'):
-            for attrName in obj.showAttributeNames():
-                value = getattr(obj,attrName)
-                if isinstance(value,str) or isinstance(value,int) or isinstance(value,float) or isinstance(value,unicode):
-                    result[attrName] = str(value)
-        elif index != None:
-            result['key'] = index
-        return result
+    def makeRows(self,index,obj):
+        if isinstance(obj,list):
+            j = 0
+            for value in obj:
+                self.makeRows('%s.%d' % (index,j),value)
+                j += 1
+        else:
+    #        result['type'] = obj.__class__.__name__
+            if hasattr(obj,'showAttributeNames'):
+                for attrName in obj.showAttributeNames():
+                    value = getattr(obj,attrName)
+                    if isinstance(value,str) or isinstance(value,int) or isinstance(value,float) or isinstance(value,unicode):
+                        self.makeRows('%s.%s' % (index,attrName),value)
+            elif hasattr(obj,'__dict__'):
+                self.makeRows(index,obj.__dict__)
+            elif isinstance(obj,dict):
+                for key,value in obj.iteritems():
+                    result = dict()
+                    result['key'] = '%s.%s' % (index,key)
+                    result['value'] = value
+                    self.rows.append(result)                    
+            elif index != None:
+                result = dict()
+                result['key'] = index
+                result['value'] = obj
+                self.rows.append(result)
+            else:
+                result = dict()
+                result['value'] = obj
+                self.rows.append(result)
 
     def addPair(self,key,value):
         self.rows.append(dict(key=key,value=str(value)))
@@ -267,11 +321,11 @@ class Tabulator:
     def add(self,obj):
         if isinstance(obj,dict):
             for key,value in obj.iteritems():
-                self.rows.append(self.makeRow(key,value))
+                self.makeRows(key,value)
         elif isinstance(obj,list):
             index = 0
             for item in obj:
-                self.rows.append(self.makeRow(index,item))
+                self.makeRows(index,item)
                 index += 1
         if hasattr(obj,'showAttributeNames'):
 #            self.rows.append(dict(key='type',value=obj.__class__.__name__))
@@ -280,13 +334,9 @@ class Tabulator:
                 if isinstance(value,str) or isinstance(value,int) or isinstance(value,float) or isinstance(value,unicode):
                     self.rows.append(dict(key=attrName,value=str(value)))
         if hasattr(obj,'state'):
-            asDict = dict()
             if obj.state == None:
                 print 'Cannot tabulate %s because state is None' % obj
-            obj.state.root.toDict(asDict,True)
-            for key,value in asDict.iteritems():
-                self.rows.append(dict(key=key,value=value))
-#            print 'DEBUG: state = %s' % asDict
+            obj.state.root.tabulate(self,True)
 
     def addElement(self,xml):
         if xml.tag == 'goalProto':
@@ -383,6 +433,8 @@ class Definitions:
         typeName = xmlDefinition.tag
         defName = xmlDefinition.get('name')
         xmlTrackDefnPath(xmlDefinition,self,['byTypeThenName',typeName,defName])
+        self.elaborate(xmlDefinition)
+
         xmlDefinition.set('isHiveDef',True)
         if self.parent.verboseMode(1):
             print 'Definition of %s %s at %s:%d' % (typeName,defName,xmlDefinition._file_name,xmlDefinition._start_line_number)
@@ -433,7 +485,44 @@ class Definitions:
     def afterUnpack(self):
         for typeName,typeDefn in self.byTypeThenName.iteritems():
             for defName,defDefn in typeDefn.iteritems():
-                xmlTrackDefnPath(defDefn,self,['byTypeThenName',typeName,defName])
+#                xmlTrackDefnPath(defDefn,self,['byTypeThenName',typeName,defName])
+                self.elaborate(defDefn)
+
+    def elaborate(self,defDefn):
+        defName = defDefn.get('name')
+        if 'type' not in defDefn.attrib:
+            # create Python class definition
+            code = '\n'
+            code += 'global %s\n' % defName
+            code += 'class %s:\n' % defName
+            members = dict()
+            for child in defDefn:
+                if not isinstance(child,Element):
+                    raise RuntimeError('Premature elaborate call at %s' % str(child))
+                if 'name' in child.attrib:
+                    members[child.get('name')] = child
+            code += '   def __init__(%s):\n' % (','.join(['self'] + ['arg_%s=None' % memberName for memberName in members.keys()]))
+            for memberName in members.keys():
+                code += '      self.%s = arg_%s\n' % (memberName,memberName)
+            if len(members) == 0:
+                code += '      pass\n'
+            code += '\n'
+            code += '   def clone(self):\n'
+            code += '      result = %s()\n' % defName
+            for memberName in members.keys():
+                code += '      if hasattr(self.%s,\'clone\'):\n' % memberName
+                code += '         result.%s = self.%s.clone()\n' % (memberName,memberName)
+                code += '      else:\n'
+                code += '         result.%s = self.%s\n' % (memberName,memberName)
+            if len(members) == 0:
+                code += '      pass\n'
+            code += '      return result\n'
+            code += '\n'
+
+#            print 'DEBUG: defining class\n%s\n' % code
+            exec(code)
+#            if hasattr(sys.modules[__name__],defName):
+#                print 'Compiling class definition for %s succeeded in module %s' % (defName,__name__)
 
 class Agency:
     def __init__(self):
@@ -450,6 +539,9 @@ class Agency:
         self.agentByUUID = dict()
         self.agentByName = dict()
         self.lock = RLock()
+
+    def attributeOrder(self):
+        return ['name','sourceFiles','definitions','result','statementStack','stateDefs','agentOrder','state','agentByName','agentByUUID']
 
     def parseArgs(self,solverArgs,remainingArgString):
         self.args = solverArgs
@@ -651,13 +743,14 @@ class Agency:
         self.lock.release()
 
     def addStateDef(self,xmlDef):
-        self.stateDefs.append(xmlDef)
-        position = '%s:%d' % (xmlDef._file_name,xmlDef._start_line_number)
-        if self.verboseMode(1):
-            print 'BEGIN Processing <state> element at '+position
-        self.state.root.initStateNode(self,self.state,xmlDef)
-        if self.verboseMode(1) :
-            print 'END   Processing <state> element at '+position
+        if 'type' in xmlDef.attrib:
+            self.stateDefs.append(xmlDef)
+            position = '%s:%d' % (xmlDef._file_name,xmlDef._start_line_number)
+            if self.verboseMode(1):
+                print 'BEGIN Processing <state> element at '+position
+            self.state.root.initStateNode(self,self.state,xmlDef)
+            if self.verboseMode(1) :
+                print 'END   Processing <state> element at '+position
 
     def createError(self,error):
         self.reportError(error)
@@ -740,6 +833,9 @@ class Agent:
         self.goalIndex = dict()
         self.lock = RLock()
         self.tempFiles = []
+
+    def attributeOrder(self):
+        return ['solver','definitions','statementStack','uuid','name','running','goalIndex','tempFiles','programName','programDefn','state','goalsByName','goals']
 
     def __str__(self):
         return '%s "%s" (%s) %s' % (self.__class__.__name__,self.name,self.uuid,self.programName)
@@ -861,7 +957,7 @@ class Agent:
             print 'END   configuration computed by Agent.loadProgram '+self.name
             print 'END   Agent %s loading program %s' % (self.name,self.programName)
 
-        for stmt in programDefn.findall('*'):
+        for stmt in self.programDefn.findall('*'):
             if 'name' in stmt.attrib:
                 self.definitions.addDefinition(stmt)
 
@@ -987,6 +1083,8 @@ class Agent:
 
     def suspend(self):
         for goal in self.goals:
+            if not isinstance(goal,Goal):
+                print 'DEBUG: expected Goal but found %s' % goal
             goal.suspend()
         for file in self.tempFiles:
             file.close()
@@ -1301,10 +1399,11 @@ class Evaluator:
         elif self.expr.tag == 'variable':
 #            self.doVariable(self.expr)
             if len(childResults) == 0:
-                pass
-                #self.createError('No child expression to compute the initial value of '+self.expr.get('name'))
+                myTask.error('There is no child expression to compute the initial value of '+self.expr.get('name'))
             elif not childResults[0].isSuccess():
-                myTask.error(childResults[0].errors)
+                myTask.error('Failed to use child expression to compute the initial value of '+self.expr.get('name'))
+                for error in childResults[0].errors:
+                    myTask.error(error)
             else:
                 interpreted = True
                 self.setValue(childResults[len(childResults)-1].value)
@@ -1492,6 +1591,9 @@ class Goal:
 
     def __str__(self):
         return '%s "%s"' % (self.__class__.__name__,self.name)
+
+    def attributeOrder(self):
+        return ['protoName','name','proto','method','agent','parent','variables','context','errors']
 
     def getDefnPath(self,defnPath):
         self.agent.getRelPath(self,self.name,defnPath)
@@ -1703,7 +1805,7 @@ class Goal:
             if self.agent.verboseMode(1):
                 print self.context.details()
 
-        if not self.proto and self.isSuccess():
+        if self.proto == None and self.isSuccess():
             self.bindToProto()
 
         if self.proto is not None:
@@ -2138,10 +2240,10 @@ class ConfigNode:
         if doAssign:
             self.assigned = other
         elif self.assigned != None:
-            self.assigned.copyFrom_r(other,False)
-        self.copyFrom_r(other,doAssign)
+            self.assigned.copyFrom_r(other)
+        self.copyFrom_r(other)
 
-    def copyFrom_r(self,other,doAssign=True):
+    def copyFrom_r(self,other):
 #        print 'DEBUG: BEGIN ConfigNode.copyFrom(%s.%s <= %s.%s)' % (self.rootConfig.parent,self.getPath('.'),other.rootConfig.parent,other.getPath('.'))
         for otherVal in other.values:
             self.values.append(otherVal)
@@ -2149,9 +2251,9 @@ class ConfigNode:
             if self.elements == None:
                 self.elements = []
             for otherElement in other.elements:
-                self.elements.append(otherElement)
+                self.elements.append(try_clone_method(otherElement))
         if other.selected != None:
-            self.selected = other.selected
+            self.selected = try_clone_method(other.selected)
         if other.fields != None:
             if self.fields == None:
                 self.fields = dict()
@@ -2159,7 +2261,7 @@ class ConfigNode:
                 if key not in self.fields:
                     self.fields[key] = ConfigNode(self.rootConfig,key)
                     self.fields[key].setParent(self)
-                self.fields[key].copyFrom_r(other.fields[key],doAssign)
+                self.fields[key].copyFrom_r(other.fields[key])
             self.typeName = other.typeName
 #        print 'DEBUG: END   ConfigNode.copyFrom(%s.%s <= %s.%s)' % (self.rootConfig.name,self.getPath('.'),other.rootConfig.name,other.getPath('.'))
 
@@ -2192,30 +2294,32 @@ class ConfigNode:
                     result += item.details()
         return result
 
-    def toDictSummary(self,result):
+    def tabulateSummary(self,result):
         lvalue = self
         while isinstance(lvalue,ConfigNode) and lvalue.assigned != None:
             lvalue = lvalue.assigned
         if lvalue.selected != None:
-            result[self.getPath('.')] = self.selected
+            result.makeRows(self.getPath('.'),lvalue.selected)
         return result
 
-    def toDict(self,result,recursive=True):
+    def tabulate(self,result,recursive=True):
 #        print 'DEBUG: BEGIN toDict(%s)' % self.getPath('.')
-        self.toDictSummary(result)
+        self.tabulateSummary(result)
         if self.fields != None:
             for key,field in self.fields.iteritems():
 #                print 'DEBUG: enter field %s' % key
-                field.toDictSummary(result)
                 if recursive:
-                    field.toDict(result,recursive)
+                    field.tabulate(result,recursive)
+                else:
+                    field.tabulateSummary(result)
         if self.elements != None:
             index = 0
             for item in self.elements:
 #                print 'DEBUG: enter element %d' % index
-                item.toDictSummary(result)
                 if recursive:
-                    item.toDict(result,recursive)
+                    item.tabulate(result,recursive)
+                else:
+                    item.tabulateSummary(result)
                 index += 1
 #        print 'DEBUG: END   toDict(%s)' % self.getPath('.')
         return result
@@ -2388,7 +2492,7 @@ class ConfigNode:
 
     def getFullPath(self,char):
         parentName = "?"
-        if self.rootConfig.parent != None:
+        if self.rootConfig != None and self.rootConfig.parent != None:
             parentName = self.rootConfig.parent.name
         result = '%s:%s' % (parentName,self.getPath(char))
         return result
@@ -2438,9 +2542,9 @@ class ConfigNode:
             if errHandler != None: errHandler.createError('empty field name at %s' % self.getPath('.'))
         elif len(pathTerms) == 1 and self.selected != None:
             if isinstance(self.selected,dict):
-                return self.selected[pathTerms[0]]
+                result = self.selected[pathTerms[0]]
             elif hasattr(self.selected,pathTerms[0]):
-                return getattr(self.selected,pathTerms[0])
+                result = getattr(self.selected,pathTerms[0])
             elif errHandler != None: errHandler.createError('%s is neither a dict nor an object but is %s' % (self.getPath('.'),self.selected))
         else:
             if self.fields == None:
@@ -2458,8 +2562,7 @@ class ConfigNode:
                     if len(pathTerms) > 1:
                         newNode.setupStruct()
                 elif errHandler != None:
-                    errHandler.createError('No field named '+pathTerms[0]+' in expression '+self.getFullPath('.')+' fields include '+(','.join(self.fields.keys())))
-                    return None
+                    raise RuntimeError('No field named '+pathTerms[0]+' in expression '+self.getFullPath('.')+' fields include '+(','.join(self.fields.keys())))
                 else:
                     if self.rootConfig.solver.verboseMode(1):
                         print 'END lookupTermList path: %s remainder: %s result: None' % (self.getPath('.'),'.'.join(pathTerms))

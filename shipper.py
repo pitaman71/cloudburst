@@ -68,7 +68,7 @@ class Shipper:
     def prepack(self):
         self.pointers = dict()
         for obj in self.values:
-            self.prepackObject(obj,True,[])
+            self.prepackObject(obj,True,[],[])
 
     def reset(self):
         self.pointers = dict()
@@ -108,7 +108,7 @@ class Shipper:
         else:
             obj = self.create(typeName,rep)
             if obj == None:
-                raise RuntimeError('Cannot locate class definition for %s' % typeName)
+                raise RuntimeError('Cannot locate class definition for %s along path %s' % (typeName,','.join([str(stack[len(stack) - i - 1]) for i in range(0,len(stack))])))
             stack.append(obj)
             members = dict()
             if 'members' in rep:
@@ -160,7 +160,7 @@ class Shipper:
                     obj = self.create(typeName,rep)
                     created = True
                 if obj == None:
-                    raise RuntimeError('Cannot locate class definition for %s' % typeName)
+                    raise RuntimeError('Cannot locate class definition for %s' % (typeName))
                 stack.append(obj)
                 if created and hasattr(obj,'beforeUnpack'):
                     created.beforeUnpack()
@@ -170,13 +170,15 @@ class Shipper:
 #                        print 'DEFINE %s' % rep['__def__']
                     self.defByName[rep['__def__']] = obj
                     self.defOrder.append(obj)
-                if created and hasattr(created,'afterUnpack'):
-                    created.afterUnpack()
+                if obj != None and hasattr(obj,'afterUnpack'):
+                    obj.afterUnpack()
                 stack.pop()
             else:
                 obj = dict()
                 stack.append(obj)
-                for key,value in rep.iteritems():
+                keyOrder = self.attributeOrder(rep,stack)
+                for key in keyOrder:
+                    value = rep[key]
                     myTask.info('unpackObject key %s' % str(key))
                     obj[key] = self.unpackObject(value,stack)
                 stack.pop()
@@ -188,7 +190,8 @@ class Shipper:
 
     def postUnpackObject(self,obj,nextRefIsDef,stack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
-        myTask = task.Task(('postUnpackObject of type %s' % objType),logger=self.serializationLog)
+#        myTask = task.Task(('postUnpackObject of type %s' % objType),logger=self.serializationLog)
+        myTask = task.Task('postUnpackObject of type %s' % objType,logger=True)
 
         result = None
         stack.append(obj)
@@ -209,30 +212,35 @@ class Shipper:
                 result = the
                 if id(result) not in self.pointers:
                     self.pointers[id(result)] = True
+                    stack.append(the)
                     self.postUnpackObject(result.__dict__,False,stack)
+                    stack.pop()
             else:
                 result = dict()
-                for key,value in obj.iteritems():
-                    if self.skipAttribute(stack,key,value):
-                        myTask.info('postUnpackObject skips key %s' % str(key))
-                    else:
-                        myTask.info('postUnpackObject follows key %s' % str(key))
-                        result[key] = self.postUnpackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+                keyOrder = self.attributeOrder(obj,stack)
+                if 'lock' in keyOrder:
+                    raise RuntimeError('ERROR: lock is in keyOrder for %s\n*** %s' % (obj,'\n*** '.join([str(obj) for obj in stack])))
+                for key in keyOrder:
+                    value = obj[key]
+                    myTask.info('postUnpackObject follows key %s' % str(key))
+                    result[key] = self.postUnpackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
         elif self.packAsScalar(obj):
             myTask.info('postUnpackObject value %s' % str(obj))
             result = obj
-            pass
         elif self.hasKey(obj):
             myTask.info('postUnpackObject REF/DEF %s' % str(self.getKey(obj)))
             result = obj
             if id(result) not in self.pointers:
+                stack.append(result)
                 self.pointers[id(result)] = True
                 newMembers = self.postUnpackObject(result.__dict__,False,stack)
                 for key,value in newMembers.iteritems():
                     result.__dict__[key] = value
+                stack.pop()
         elif id(obj) not in self.pointers:
             self.pointers[id(obj)] = True
             self.postUnpackObject(obj.__dict__,False,stack)
+            result = obj
         else:
             result = obj
 
@@ -241,8 +249,8 @@ class Shipper:
             raise RuntimeError('Unable to cross-reference %s' % obj)
         return result
 
-    def skipAttribute(self,stack,attr,toObj):
-        return False
+    def attributeOrder(self,obj,stack):
+        return obj.keys()
 
     def packAsVoid(self,obj):
         return False
@@ -250,7 +258,7 @@ class Shipper:
     def packAsScalar(self,obj):
         return isinstance(obj,bool) or isinstance(obj,str) or isinstance(obj,int) or isinstance(obj,float) or isinstance(obj,unicode) or isinstance(obj,datetime.datetime)
 
-    def prepackObject(self,obj,nextRefIsDef,stack):
+    def prepackObject(self,obj,nextRefIsDef,stack,keyStack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
         myTask = task.Task('prepackObject of type %s' % objType,logger=self.serializationLog)
         if objType == 'ResourceModel':
@@ -264,15 +272,16 @@ class Shipper:
             if obj == None:
                 pass
             elif type(obj) in (tuple,list):
+                index = 0
                 for item in obj:
-                    self.prepackObject(item,nextRefIsDef,stack)
+                    self.prepackObject(item,nextRefIsDef,stack,keyStack+[index])
+                    index += 1
             elif type(obj) == dict:
-                for key,value in obj.iteritems():
-                    if self.skipAttribute(stack,key,value):
-                        myTask.info('prepackObject skips key %s' % str(key))
-                    else:
-                        myTask.info('prepackObject follows key %s' % str(key))
-                        self.prepackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+                keyOrder = self.attributeOrder(obj,stack)
+                for key in keyOrder:
+                    value = obj[key]
+                    myTask.info('prepackObject follows key %s' % str(key))
+                    self.prepackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack,keyStack+[key])
             elif self.packAsVoid(obj):
                 myTask.info('prepackObject void %s' % str(obj).decode('utf8'))
                 pass
@@ -285,18 +294,18 @@ class Shipper:
                     self.defByName[key] = obj
                     self.defOrder.append(obj)
                     myTask.info('prepackObject DEF %s' % str(key))
-                    self.prepackObject(obj.__dict__,False,stack)
+                    self.prepackObject(obj.__dict__,False,stack,keyStack+[key])
                 else:
                     myTask.info('prepackObject REF %s' % str(key))
             elif id(obj) in self.pointers:
                 pass
-                #raise RuntimeError('Recursion detected on object %s' % obj)
+#                raise RuntimeError('Recursion detected on object %s\nprev = %s\nnew = %s' % (obj,self.pointers[id(obj)],','.join([str(item) for item in keyStack])))
             else:
-                self.pointers[id(obj)] = True
+                self.pointers[id(obj)] = ','.join([str(item) for item in keyStack])
                 if not hasattr(obj,'__dict__'):
                     print 'WARNING: this object is not really an object! %s' % obj
                 else:
-                    self.prepackObject(obj.__dict__,False,stack)
+                    self.prepackObject(obj.__dict__,False,stack,keyStack)
             stack.pop()
 
     def packObject(self,obj,nextRefIsDef,stack):
@@ -328,12 +337,11 @@ class Shipper:
                     result = tuple(result)
             elif type(obj) == dict:
                 result = dict()
-                for key,value in obj.iteritems():
-                    if self.skipAttribute(stack,key,value):
-                        myTask.info('packObject skips key %s' % str(key))
-                    else:
-                        myTask.info('packObject follows key %s' % str(key))
-                        result[key] = self.packObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+                keyOrder = self.attributeOrder(obj,stack)
+                for key in keyOrder:
+                    value = obj[key]
+                    myTask.info('packObject follows key %s' % str(key))
+                    result[key] = self.packObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
             elif self.packAsVoid(obj):
                 myTask.info('packObject void %s' % str(obj).decode('utf8'))
                 result = None

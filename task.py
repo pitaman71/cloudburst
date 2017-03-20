@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import datetime
+import logging
 
 class Task:
 	def __init__(self,purpose=None,logger=None):
@@ -12,7 +13,10 @@ class Task:
 		self.warnings = []
 		self.errors = []
 		self.status = 'READY'
-		self.logger = logger
+		if logger == True:
+			self.logger = logging.getLogger()
+		else:
+			self.logger = logger
 		self.startTime = datetime.datetime.now()
 		self.status = 'BEGIN'
 		if self.logger:
