@@ -1730,9 +1730,11 @@ class Goal:
                     subgoal = Goal()
                     subgoal.cfgSubGoal(goalName,self,self.context,xml,self.agent.solver.remainingArgString,self.agent)
                     self.agent.addGoal(subgoal)
-                    print 'DEBUG: BEGIN precondition %s' % subgoal.name
+                    if self.agent.verboseMode(1) or self.agent.goalsMode(1):                    
+                        print '# PUSH precondition %s of %s' % (subgoal.name,self.name)
                     subgoal.pursue(executeMode)
-                    print 'DEBUG: END   precondition %s' % subgoal.name
+                    if self.agent.verboseMode(1) or self.agent.goalsMode(1):                    
+                        print '# POP  precondition %s of %s' % (subgoal.name,self.name)
                     if not subgoal.isSuccess():
                         result = False
 

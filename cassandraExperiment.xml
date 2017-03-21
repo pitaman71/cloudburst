@@ -60,12 +60,12 @@
         <describe locale="en-US">The recommended cluster configuration in EC2 for a Janusgraph development or demo exercise</describe>
         <struct name="dbNodes" type="EC2GroupConfiguration">
             <variable name="numNodes" type="int">3</variable>
-            <variable name="image" type="string">ami-f7290c92</variable>
+            <variable name="image" type="string">ami-0a5b7e6f</variable>
             <variable name="instanceType" type="string">m4.large</variable>
             <variable name="instancePrefix" type="string">JGCSNode</variable>
             <variable name="region" type="string">us-east-2</variable>
             <variable name="networkAdapterName" type="string">enet0</variable>
-            <variable name="securityGroupId" type="string">sg-12d46d7b</variable>
+            <variable name="securityGroupId" type="string">sg-6ddab604</variable>
             <variable name="isJanusGraphNode" type="bool">True</variable>
             <variable name="isCassandraNode" type="bool">True</variable>
         </struct>
@@ -859,6 +859,7 @@ for instance in instances:
                 <send>cd <get>agent.installDir</get>/janusgraph ; git checkout tp32-upgrade</send>
                 <send>sudo apt-get --assume-yes install maven</send>
                 <send>cd <get>agent.installDir</get>/janusgraph ; sudo mvn clean -DskipTests</send>
+                <send>ps -aef | grep cassandra | grep -v grep | tr -s ' ' | cut -d' ' -f 2 | xargs sudo kill -9</send>
             </shell>                            
         </method>
         <goalProto name="buildJGNode">
@@ -897,8 +898,8 @@ for line in fin:
     line = re.sub('^rpc_address: \S+','rpc_address: 0.0.0.0',line)
     line = re.sub('\# num_tokens:.*','num_tokens: 32',line)
     # documentation says use fully-qualified Java class names for authenticator and authorizer, but that causes "class not found" failure 
-    line = re.sub('authenticator:.*','authenticator: PasswordAuthenticator',line)
-    line = re.sub('authorizer:.*','authorizer: CassandraAuthorizer',line)
+    # line = re.sub('authenticator:.*','authenticator: PasswordAuthenticator',line)
+    # line = re.sub('authorizer:.*','authorizer: CassandraAuthorizer',line)
     fout.write(line)
 
 if not seen['broadcast_rpc_address']:
@@ -915,9 +916,36 @@ if not seen['broadcast_rpc_address']:
                 </shell>
             </do>
             <do>
+                <describe locale="en_US">Adjust gremlin-server.yaml to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:<get>agent.installDir</get>/janusgraph/conf/gremlin-server/gremlin-server.yaml gremlin-server.yaml.original</send>
+                </shell>
+                <python>
+                    <code>
+import re
+fin = open('gremlin-server.yaml.original','r')
+fout = open('gremlin-server.yaml.fixed','w')
+for line in fin:
+    line = line.decode('utf8')
+    line = re.sub('^host: localhost','host: 0.0.0.0',line)
+    fout.write(line)
+    if re.search('serializers:',line) != None:
+        fout.write("""  - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerGremlinV2d0, config: { ioRegistries: [org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerIoRegistryV2d0]  }} # application/vnd.gremlin-v2.0+json\n""")
+        fout.write("""  - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerV3d0, config: { useMapperFromGraph: graph }}         # application/json,application/vnd.gremlin-v3.0+json\n""")
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> gremlin-server.yaml.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv gremlin-server.yaml.fixed <get>agent.installDir</get>/janusgraph/conf/gremlin-server/gremlin-server.yaml</send>
+                </shell>
+            </do>
+            <do>
                 <describe locale="en_US">Adjust cassandra-env.sh to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
                 <shell>
-                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:/etc/dse/cassandra/cassandra-env.sh cassandra-env.sh.original</send>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:<get>agent.installDir</get>/janusgraph/conf/cassandra/cassandra-env.sh cassandra-env.sh.original</send>
                 </shell>
                 <python>
                     <referenceDoc><url>https://www.liquidweb.com/kb/error-failed-to-connect-to-127-0-0-17199-connection-refused-cassandra-solved/</url></referenceDoc>
@@ -936,7 +964,7 @@ for line in fin:
                 </shell>
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                    <send name="command" onFail="stop">sudo mv cassandra-env.sh.fixed /etc/dse/cassandra/cassandra-env.sh</send>
+                    <send name="command" onFail="stop">sudo mv cassandra-env.sh.fixed <get>agent.installDir</get>/janusgraph/conf/cassandra/cassandra-env.sh</send>
                 </shell>
             </do>
         </method>
@@ -947,8 +975,28 @@ for line in fin:
             <describe locale="en_US">Start Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
             <shell>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                <send>cd <get>agent.installDir</get> ; janusgraph/bin/janusgraph.sh start</send>
+                <send>cd <get>agent.installDir</get>/janusgraph ; sudo bin/janusgraph.sh start</send>
             </shell>                            
+        </method>
+        <goalProto name="checkPythonBindingJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="the" symbol="goal" targetGoalType="checkPythonBindingJGNode">
+            <describe locale="en_US">Check Python bindings</describe>
+                <python>
+                    <code>
+from gremlin_python import statics
+from gremlin_python.structure.graph import Graph
+from gremlin_python.process.traversal import P
+from gremlin_python.process.graph_traversal import __
+from gremlin_python.process.strategies import *
+from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
+
+gremlinServer = '<get>goal.node.public_ip_address</get>:8182'
+graph = Graph()
+g.V().count().next()
+                    </code>
+                </python>
         </method>
         <goalProto name="stopJGNode">
             <variable name="node" type="EC2Node"/>
@@ -957,7 +1005,7 @@ for line in fin:
             <describe locale="en_US">Stop Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
             <shell>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                <send>cd <get>agent.installDir</get> ; janusgraph/bin/janusgraph.sh stop</send>
+                <send>cd <get>agent.installDir</get>/janusgraph ; sudo bin/janusgraph.sh stop</send>
             </shell>                            
         </method>
         <goalProto name="setup" symbol="goal">
