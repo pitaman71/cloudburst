@@ -1,6 +1,6 @@
-# hive
+# cloudburst
 
-Use Cases for Hive:
+Use Cases for Cloudburst:
 * Creating a cloud software product from a collection of node-level software components
 * Cluster-wide goal-oriented dataflow integration
 * Retrofitting a cloud service interface onto existing (node-local) programs
@@ -19,7 +19,7 @@ Features:
     - [x] Goal.pursue
     - [x] Goal.execute 
     - [x] ExprResult
-    - [x] hive_cli: list, plan, pursue commands
+    - [x] cli: list, plan, pursue commands
     - [ ] UC Tested
     - [ ] UC Documented
 - [ ] Execution Modes
@@ -48,76 +48,76 @@ Features:
     - [x] find/in/do task statements
     - [x] goalCompleted as an executable statement (spawned subgoal)
     - [x] using <set> and <get> as lvalue and rvalue in <python><code> blocks
-    - [ ] install and invoke hive agency on remote node
+    - [ ] install and invoke cloudburst agency on remote node
     - [ ] agent program and state exchange b/w participants
         - [ ] ConfigMonitor, ConfigUpdater python classes
         - [ ] ConfigTransaction, ConfigChange python classes
-        - [ ] hive_agency REST SendStateUpdate
+        - [ ] agency REST SendStateUpdate
     - [ ] UC Tested
     - [ ] UC Documented
 - [ ] local management of remote goal dispatch
     - [ ] anticipate remote dispatch
     - [ ] procure peer instances as needed
-    - [ ] transmit goal to remote hive daemon
-    - [ ] monitor goal progress on remote hive daemon
-    - [ ] receive final outcome of remote hive daemon
+    - [ ] transmit goal to remote cloudburst daemon
+    - [ ] monitor goal progress on remote cloudburst daemon
+    - [ ] receive final outcome of remote cloudburst daemon
     - [ ] UC Tested
     - [ ] UC Documented
 - [ ] securing peer to peer communication
-    - [ ] hive_agency require authentication for node2node
+    - [ ] agency require authentication for node2node
     - [ ] require configured SSL encryption for node2node
-- [ ] Web-based Hive Control Center
+- [ ] Web-based Cloudburst Control Center
     - [ ] monitoring agents and goals
         - [ ] browse/inspect running agents
         - [ ] browse/inspect goals per agent
-        - [ ] load hive program from file
+        - [ ] load cloudburst program from file
     - [ ] send and monitor basic commands
         [ ] basic Flask-based RESTful service
         [ ] schema-independent React/Redux front-end
         [ ] ObjectWindow
-        [ ] browse commands on HiveDashboard.AgentInspector
+        [ ] browse commands on CloudburstDashboard.AgentInspector
         [ ] submit command as goal
         [ ] autoconfigure goal
         [ ] edit/resubmit goal
-        [ ] browse all goals on HiveDashboard.AgentInspector
-        [ ] filter/sort goals on HiveDashboard.AgentInspector
+        [ ] browse all goals on CloudburstDashboard.AgentInspector
+        [ ] filter/sort goals on CloudburstDashboard.AgentInspector
 - [ ] Plan and Graph (comparable to Terraform)
     - [ ] 
 - [ ] Snapshots and Checkpoints
     - [ ] Using cloud snapshots to accelerate authoring/debug of instance provisioning recipes
-    - [ ] Using Hive programs to construct Docker images
-- [ ] Peer to Peer cloud: hive_daemon
-    - [x] hive_agency: factor shared code out of hive_cli
+    - [ ] Using Cloudburst programs to construct Docker images
+- [ ] Peer to Peer cloud: agency
+    - [x] agency: factor shared code out of cloudburst_cli
     - [x] class Config: represents initial, partial, proposed, corrected, validated, completed variable state for each Goal
-    - [ ] hive_agency: "hello" command returns agency config
-    - [ ] hive_agency: "agents" lists local agents
-    - [ ] hive_agency: "programs" lists local programs
-    - [ ] hive_agency: "start(programName)" begins a new agent and returns agent detail
-    - [ ] hive_agency: "examine(agentName)" returns agent detail
-    - [ ] hive_agency: "suspend(agentName)" suspends a running agent and returns agent detail
-    - [ ] hive_agency: "resume(agentName)" resumes a suspended agent and returns agent detail
-    - [ ] hive_agency: "stop(agentName)" terminates an agent
-    - [ ] hive_agency: static authorization (authority, email, capability, lifetime) in permissions.xml
-    - [ ] hive_agency: static neighborhood in neighborhood.xml
-    - [ ] hive_agency: cache authenticated sessions
+    - [ ] agency: "hello" command returns agency config
+    - [ ] agency: "agents" lists local agents
+    - [ ] agency: "programs" lists local programs
+    - [ ] agency: "start(programName)" begins a new agent and returns agent detail
+    - [ ] agency: "examine(agentName)" returns agent detail
+    - [ ] agency: "suspend(agentName)" suspends a running agent and returns agent detail
+    - [ ] agency: "resume(agentName)" resumes a suspended agent and returns agent detail
+    - [ ] agency: "stop(agentName)" terminates an agent
+    - [ ] agency: static authorization (authority, email, capability, lifetime) in permissions.xml
+    - [ ] agency: static neighborhood in neighborhood.xml
+    - [ ] agency: cache authenticated sessions
 - [ ] Resilient Forward Recovery Path: Suspending, Reconfiguring, and Resume Interrupted Goals
     - [ ] failing methods cause goal to be suspended
-    - [ ] browse suspended goals on hive dashboard
+    - [ ] browse suspended goals on cloudburst dashboard
     - [ ] edit/continue/cancel suspended goal
     - [ ] optional manual correction method for suspended goal
     - [ ] optional automated method for suspended goal
     - [ ] local persistent state backend for agent, goal, solver state
     - [ ] resuming agency operation on restart
     - [ ] state persistence backend
-- [ ] Emulating & Integrating POSIX make with Hive
-- [ ] Emulating & Integrating Apache Maven with Hive
-- [ ] Emulating & Integrating npm with Hive
-- [ ] Emulating & Integrating Jenkins with Hive
-- [ ] Emulating & Integrating cron with Hive
+- [ ] Emulating & Integrating POSIX make with Cloudburst
+- [ ] Emulating & Integrating Apache Maven with Cloudburst
+- [ ] Emulating & Integrating npm with Cloudburst
+- [ ] Emulating & Integrating Jenkins with Cloudburst
+- [ ] Emulating & Integrating cron with Cloudburst
 - [ ] Emulating & Integrating Terraform.io
 - [ ] Emulating & Integrating Docker
 - [ ] Production Delivery modes
-    - [ ] hive_daemon: delivery to POSIX host via scp
-    - [ ] hive_daemon: delivery to POSIX host via rpm package + yum
-    - [ ] hive: remote-start local hive daemon via sudo
-    - [ ] hive: remote-start remote hive daemon via ssh
+    - [ ] agency: delivery to POSIX host via scp
+    - [ ] agency: delivery to POSIX host via rpm package + yum
+    - [ ] agency: remote-start local cloudburst daemon via sudo
+    - [ ] agency: remote-start remote cloudburst daemon via ssh

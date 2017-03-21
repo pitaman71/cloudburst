@@ -435,7 +435,7 @@ class Definitions:
         xmlTrackDefnPath(xmlDefinition,self,['byTypeThenName',typeName,defName])
         self.elaborate(xmlDefinition)
 
-        xmlDefinition.set('isHiveDef',True)
+        xmlDefinition.set('isCloudburstDef',True)
         if self.parent.verboseMode(1):
             print 'Definition of %s %s at %s:%d' % (typeName,defName,xmlDefinition._file_name,xmlDefinition._start_line_number)
         if typeName not in self.byTypeThenName:
@@ -560,13 +560,13 @@ class Agency:
         self.defnPath = []       
         for segment in os.environ['HOME'].split('/'):
             self.defnPath.append(segment)
-        self.defnPath.append('hiveData')
+        self.defnPath.append('.cloudburst/data')
         if not os.path.exists('/'.join(self.defnPath)):
             os.makedirs('/'.join(self.defnPath))
         globs = glob.glob(os.path.expanduser('/'.join(self.defnPath)))
         self.persistentPath = globs[0]
-        if os.path.exists('%s/.hive/private.xml' % (os.environ['HOME'])):
-            self.readFileXML('%s/.hive/private.xml' % os.environ['HOME'],False)
+        if os.path.exists('%s/.cloudburst/private.xml' % (os.environ['HOME'])):
+            self.readFileXML('%s/.cloudburst/private.xml' % os.environ['HOME'],False)
         if os.path.exists('%s/agency.json' % self.persistentPath):
             self.readState('%s/agency.json' % self.persistentPath)
 
@@ -730,7 +730,7 @@ class Agency:
             if 'name' in element.attrib:
                 self.addDefinition(element)
             else:
-                self.createError('%s:%d: attribute name must be present on all top-level XML nodes, which are considered to be Hive definitions' % (element._file_name,element._start_line_number))
+                self.createError('%s:%d: attribute name must be present on all top-level XML nodes, which are considered to be Cloudburst definitions' % (element._file_name,element._start_line_number))
             if element.tag == 'variable' or element.tag == 'list' or element.tag == 'struct':
                 self.addStateDef(element)
 
@@ -1534,7 +1534,6 @@ class Evaluator:
                         for error in sub.errors:
                             self.errors.append(error)
                     elif not self.executeMode:
-                        raise RuntimeError('GOTCHA')
                         print '\n'.join(['PLAN %s' % x for x in sub.getStringValue().split('\n')])
                         interpreted = True
                     else:
@@ -2041,7 +2040,6 @@ class Goal:
                             if self.agent.echoMode():
                                 print "END   <shell><send>%s%s</send></shell>" % (shellCommand+' ' if shellCommand != None else '',cmd)
                         else:   
-                            raise RuntimeError('GOTCHA')
                             print "PLAN  %s" % cmd
                 elif(child.tag == 'receive'):
                     cmd = self.agent.interpolateInner(self.context,child,self)
@@ -2060,7 +2058,7 @@ class Goal:
             evaluator.setXML(stmt)
             evaluator.evaluate()
             if not evaluator.isSuccess():
-                self.createErrorAt(stmt,'Expected hive statement or expression')
+                self.createErrorAt(stmt,'Expected cloudburst statement or expression')
                 for error in evaluator.errors:
                     self.errors.append(error)
             elif toBool(evaluator.getRvalue()) != True:
@@ -2472,8 +2470,6 @@ class ConfigNode:
         else:
             if self.rootConfig.solver.verboseMode(1):
                 print 'ConfigNode.setValue assigns '+self.getFullPath('.')+' to '+str(value)
-            if value == 'JanusGraphClusterDemo':
-                raise RuntimeError('GOTCHA!')
             self.selected = value
             if self.assigned != None:
                 if self.rootConfig.solver.verboseMode(1):

@@ -1,4 +1,4 @@
-"""HiveAgents - a cloud application framework
+"""Cloudburst - a cloud application framework
 """
 
 from setuptools import setup, find_packages
@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='hive',
+    name='cloudburst',
 
     version='0.0.1',
 
@@ -20,7 +20,7 @@ setup(
     long_description=long_description,
 
     # The project's main homepage.
-    url='https://github.com/pitaman71/hive.git',
+    url='https://github.com/pitaman71/cloudburst.git',
 
     # Author details
     author='Alan Pita',
@@ -95,7 +95,7 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points={
         'console_scripts': [
-            'hive=hive:hive_cli',
+            'cloudburst=cloudburst:cli',
         ],
     },
 )

@@ -1,4 +1,4 @@
-<hive name="CassandraExperiment">
+<cloudburst name="CassandraExperiment">
     <struct name="SSLCertificate">
         <variable name="localFilePath" type="localFilePath"/>
     </struct>
@@ -828,7 +828,7 @@ for instance in instances:
         <variable name="cluster" type="EC2Cluster"/>
         <variable name="jgInstances" type="EC2Instances"/>
         <variable name="seeds" type="EC2Instances"/>
-        <variable name="installDir" type="localFilePath">/var/hive</variable>
+        <variable name="installDir" type="localFilePath">/var/cloudburst</variable>
         <pre><defined><get>agent.config</get></defined></pre>
         <pre><defined><get>agent.ec2Creds</get></defined></pre>
         <pre><defined><get>agent.clusterName</get></defined></pre>
@@ -1158,4 +1158,4 @@ time.sleep(180)
             <shell><send>rm -f <get>agent.file</get></send></shell>
         </method>
     </agent>
-</hive>
+</cloudburst>

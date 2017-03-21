@@ -370,8 +370,6 @@ class Shipper:
             else:
                 self.pointers[id(obj)] = True
                 result = dict()
-                if self.getType(obj) == 'Config':
-                    result['__GOTCHA__'] = True
                 result['__type__']=self.getType(obj)
                 result['__members__'] = self.packObject(obj.__dict__,False,stack)
             stack.pop()

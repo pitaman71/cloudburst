@@ -1,25 +1,25 @@
 #!/usr/bin/python
 
 import sys
-import hive
+import cloudburst
 import argparse
 import xml.etree.ElementTree as ElementTree
 import jsonpickle
 
-parser = argparse.ArgumentParser(description="Hive Command-Line Interpreter")
+parser = argparse.ArgumentParser(description="Cloudburst Command-Line Interpreter")
 parser.add_argument('--verbose','-v',nargs=1,help='Add an extremely detailed debug trace to stdout')
 parser.add_argument('--narrate','-n',action='count',help='Print narrative (concise, easy-to-read, single-line) comments that describe the goals being executed and progress toward completing each')
 parser.add_argument('--goals','-g',action='count',help='Print single-line comments that describe the goals being executed including how they are configured')
 parser.add_argument('--echo','-e',action='count',help='Echo external commands (e.g. embedded code in shell, python) before and after execution')
-parser.add_argument('--lines','-l',action='count',help='Print hive program line numbers with all trace messages')
-parser.add_argument('--initial','-i',action='count',help='Print initial state of hive agency after loading programs')
-parser.add_argument('--final','-f',action='count',help='Print final state of hive agency after executing/solving goals')
+parser.add_argument('--lines','-l',action='count',help='Print cloudburst program line numbers with all trace messages')
+parser.add_argument('--initial','-i',action='count',help='Print initial state of cloudburst agency after loading programs')
+parser.add_argument('--final','-f',action='count',help='Print final state of cloudburst agency after executing/solving goals')
 subparsers = parser.add_subparsers(dest='subcommand')
 
-loadCmd = subparsers.add_parser('load',help='Load Hive definitions from file')
-loadCmd.add_argument('program',help='file containing a Hive program')
+loadCmd = subparsers.add_parser('load',help='Load Cloudburst definitions from file')
+loadCmd.add_argument('program',help='file containing a Cloudburst program')
 
-listCmd = subparsers.add_parser('list',help='List all Hive definitions')
+listCmd = subparsers.add_parser('list',help='List all Cloudburst definitions')
 
 inspectCmd = subparsers.add_parser('inspect',help='Inspect agency state')
 inspectCmd.add_argument('path',help='path to any agency state object')
@@ -46,7 +46,7 @@ killCmd.add_argument('agent',help='Name of the agent itself')
 tup = parser.parse_known_args()
 solverArgs = tup[0]
 
-solver = hive.Agency()
+solver = cloudburst.Agency()
 solver.parseArgs(solverArgs,tup[1])
 
 solver.start()
@@ -58,7 +58,7 @@ if(solverArgs.subcommand == 'load'):
     success = True
 
 if(solverArgs.subcommand == 'list'):
-    tabulator = hive.Tabulator()
+    tabulator = cloudburst.Tabulator()
     goalProtos = solver.getDefinitions('goalProto')
     for goalProto in goalProtos:
         tabulator.addElement(goalProto)
