@@ -883,8 +883,16 @@ class Agent:
 
         result.initPath(['host','platform'],sys.platform)
         result.initPath(['host','uname'],os.uname()[0])
-        result.initPath(['host','hostname'],socket.gethostname())
-        result.initPath(['host','hostip'],socket.gethostbyname(socket.gethostname()))
+        hostname = socket.gethostname()
+        result.initPath(['host','hostname'],hostname)
+
+        # odd recipe that works in some corner cases where socket.gethostbyname fails borrowed from:
+        # http://stackoverflow.com/questions/166506/finding-local-ip-addresses-using-pythons-stdlib
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        hostip = s.getsockname()[0]
+        s.close()
+        result.initPath(['host','hostip'],hostip)
 
         node = result.root.lookupTermList(True,['agent'],self)
         node.copyFrom(self.state.root.lookupTermList(False,['agent'],self))
@@ -935,7 +943,6 @@ class Agent:
         self.programName = programName
         oldName = self.name
         self.name = agentName
-        self.solver.renameAgent(self,oldName,agentName)
         if self.verboseMode(1):
             print 'BEGIN Agent %s loading program %s' % (self.name,programName)
         programDefn = self.solver.definitions.getDefinitionByTypeAndName('agent',self.programName)
@@ -947,6 +954,8 @@ class Agent:
         agentNode = self.state.root.lookupTermList(True,['agent'],self)
         agentNode.initStateChildren(self.solver,self.state,self.programDefn)
         self.state.handleStateOverrides(self,self.solver.remainingArgString,False)
+        self.state.initPath(['agent','name'],agentName)
+        self.solver.renameAgent(self,oldName,agentName)
 
         result = self.checkPre()
         if result != True:
@@ -1406,7 +1415,18 @@ class Evaluator:
                     myTask.error(error)
             else:
                 interpreted = True
-                self.setValue(childResults[len(childResults)-1].value)
+                text = ''
+                useText = len(childResults) > 1
+                for child in childResults:
+                    text += child.getStringValue()
+                    text += child.tail
+                    if len(child.tail) > 0:
+                        useText = True
+                    self.outcome = self.outcome and child.outcome
+                if useText:
+                    self.setValue(text)
+                else:
+                    self.setValue(childResults[len(childResults)-1].value)
         elif self.expr.tag == 'list':
 #            self.doVariable(self.expr)
             if len(childResults) == 0:
