@@ -8,15 +8,16 @@ import argparse
 
 commandIndex = 0
 
+scriptPath = os.path.dirname(os.path.realpath(__file__))
+
 parser = argparse.ArgumentParser(description="Cloudburst test #2")
 parser.add_argument('--name',default='jgdemo1')
 parser.add_argument('--clean',default=False,action='store_true')
-parser.add_argument('--cloudburstHome',default=os.environ['CLOUDBURST_HOME'] if 'CLOUDBURST_HOME' in os.environ else '%s/cloudburst' % os.path.dirname(sys.argv[0]))
 argObj = parser.parse_args()
 
 args = dict()
 args['name'] = argObj.name
-args['cloudburstHome'] = argObj.cloudburstHome
+args['cloudburstHome'] = scriptPath
 
 def run(command):
     global commandIndex

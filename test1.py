@@ -6,7 +6,7 @@ import pexpect
 import glob
 import argparse
 
-parser = argparse.ArgumentParser(description="Cloudburst test #2")
+parser = argparse.ArgumentParser(description="Cloudburst test #1")
 parser.add_argument('--clean',default=False,action='store_true')
 parser.add_argument('--cloudburstHome',default=os.environ['CLOUDBURST_HOME'] if 'CLOUDBURST_HOME' in os.environ else os.path.dirname(sys.argv[0]))
 argObj = parser.parse_args()

@@ -70,67 +70,19 @@
             <variable name="isCassandraNode" type="bool">True</variable>
         </struct>
     </struct>
-    <struct name="i-02e3afedc1a92b410" type="EC2Node">
-        <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
-        <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address">54.89.82.240</variable>
-        <struct name="credentials" type="SSHCredentials">
-            <describe locale="en-US">SSH/TLS username and certificate</describe>
-            <variable name="user" type="username">ec2-user</variable>
-            <struct name="privateKey" type="SSLCertificate">
-                <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
-            </struct>
-        </struct>
-    </struct>
-    <struct name="i-0375a11f5e322ee0d" type="EC2Node">
-        <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Alan's personal account</describe>
-        <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address">52.23.220.50</variable>
-        <struct name="credentials" type="SSHCredentials">
-            <describe locale="en-US">SSH/TLS username and certificate</describe>
-            <variable name="user" type="username">ec2-user</variable>
-            <struct name="privateKey" type="SSLCertificate">
-                <variable name="localFilePath" type="localFilePath">~/.ssh/CassandraExperiment1.pem</variable>
-            </struct>
-        </struct>
-    </struct>
-    <struct name="DSEDemoCluster" type="EC2Cluster">
-        <struct name="credentials" type="SSHCredentials">
-            <describe locale="en-US">SSH/TLS username and certificate</describe>
-            <variable name="user" type="username">ubuntu</variable>
-            <struct name="privateKey" type="SSLCertificate">
-                <variable name="localFilePath" type="localFilePath">~/.ssh/expero-us-east-2.pem</variable>
-            </struct>
-        </struct>
-        <struct name="budget">
-            <struct name="LargeNode" type="EC2Node">
-                <variable name="budget">4</variable>
-            </struct>
-        </struct>
-        <struct name="allocated">
-            <struct name="TNode0" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-05af501073923f7ce</variable>
-                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address">52.14.52.56</variable>
-            </struct>
-            <struct name="TNode1" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-068acbba609252604</variable>
-                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address">52.14.100.138</variable>
-            </struct>
-            <struct name="TNode2" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-02aeeb57787d459dd</variable>
-                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address">52.14.75.181</variable>
-            </struct>
-            <struct name="TNode3" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-00c68b14a1691f57e</variable>
-                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address">52.14.99.7</variable>
-            </struct>
-            <struct name="SNode0" type="EC2Node">
-                <describe locale="en-US">Manually created EC2 node for testing purposes, billed to Expero corporate account</describe>
-                <variable name="instance" type="string">i-0959911e46c66a28a</variable>
-                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address">52.14.81.63</variable>
-            </struct>
+    <struct name="DSEGDemoClusterConfig" type="EC2ClusterConfiguration">
+        <variable name="region" type="string">us-east-2</variable>
+        <describe locale="en-US">The recommended cluster configuration in EC2 for a Janusgraph development or demo exercise</describe>
+        <struct name="dbNodes" type="EC2GroupConfiguration">
+            <variable name="numNodes" type="int">3</variable>
+            <variable name="image" type="string">ami-0a5b7e6f</variable>
+            <variable name="instanceType" type="string">m4.large</variable>
+            <variable name="instancePrefix" type="string">DSEGNode</variable>
+            <variable name="region" type="string">us-east-2</variable>
+            <variable name="networkAdapterName" type="string">enet0</variable>
+            <variable name="securityGroupId" type="string">sg-6ddab604</variable>
+            <variable name="isJanusGraphNode" type="bool">True</variable>
+            <variable name="isCassandraNode" type="bool">True</variable>
         </struct>
     </struct>
     <goalProto name="test1" symbol="goal">
@@ -1163,9 +1115,321 @@ time.sleep(180)
 import boto3
 botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
 botoResource = botoSession.resource('ec2')
-print 'Attempting to create botoResource.Instance(%s)' % <get>instance.id</get>
-botoInstance = botoResource.Instance(<get>instance.id</get>)
-print 'Sending terminate signal to id=%s private ip=%s' % (<get>instance.id</get>,<get>instance.private_ip_address</get>)
+botoInstance = botoResource.Instance('<get>instance.id</get>')
+print 'Sending terminate signal to id=%s private ip=%s' % ('<get>instance.id</get>','<get>instance.private_ip_address</get>')
+botoInstance.terminate()
+                        </code>
+                    </python>
+                </do>
+            </find>
+            </do>
+        </method>
+    </agent>
+    <agent name="DSEGClusterDemo">
+        <variable name="clusterName" type="string"/>
+        <variable name="config" type="EC2ClusterConfiguration"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="cluster" type="EC2Cluster"/>
+        <variable name="dsegInstances" type="EC2Instances"/>
+        <variable name="seeds" type="EC2Instances"/>
+        <variable name="installDir" type="localFilePath">/var/cloudburst</variable>
+        <pre><defined><get>agent.config</get></defined></pre>
+        <pre><defined><get>agent.dseCreds</get></defined></pre>
+        <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        <pre><defined><get>agent.clusterName</get></defined></pre>
+        <goalProto name="installDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="fromDatastax" symbol="goal" targetGoalType="installDSEGNode">
+            <tempFile name="dataStaxYumRepo">
+                <describe locale="en_US">Create temp file with YUM repository entry for datastax</describe>
+[datastax]
+name = DataStax Repo for DataStax Enterprise
+baseurl=https://<get>agent.dseCreds.user</get>:<python name="urllib.quote_plus"><get>agent.dseCreds.password</get></python>@rpm.datastax.com/enterprise
+enabled=1
+gpgcheck=0
+            </tempFile>
+            <shell>
+                <describe locale="en_US">Copy YUM repository entry file to <get>goal.node.public_ip_address</get> using scp</describe>
+                <label>cpYumConfigForDatastax</label>
+
+                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:datastax.repo
+                </send>
+            </shell>
+            <shell>
+                <describe locale="en_US">Make sure YUM program is installed on <get>goal.node.public_ip_address</get> using apt-get</describe>
+                <label>installYum</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send name="command" onFail="stop">sudo apt-get --assume-yes install yum*</send>
+            </shell>
+            <shell>
+                <describe locale="en_US">Move datastax YUM repo to /etc using sudo</describe>
+                <label>copyDSEReposFile</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send name="command" onFail="stop">sudo cp ~<get>agent.sshCreds.user</get>/datastax.repo /etc/yum/repos.d/</send>
+            </shell>
+            <shell>
+                <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.public_ip_address</get> using yum</describe>
+                <label>installJava1.8</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send name="command" onFail="stop">sudo apt-add-repository ppa:webupd8team/java -y</send>
+                <send name="command" onFail="stop">sudo apt-get update</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">sudo apt-get install oracle-java8-installer -y</send>
+                <send name="command" onFail="stop">sudo java -version</send>
+            </shell>
+            <shell>
+                <describe locale="en_US">Make sure DSE full product package is installed on <get>goal.node.public_ip_address</get> using yum</describe>
+                <label>installDSE</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send name="command" onFail="stop">echo "deb https://<get>agent.dseCreds.user</get>:<python name="urllib.quote_plus"><get>agent.dseCreds.password</get></python>@debian.datastax.com/enterprise stable main" | sudo tee -a /etc/apt/sources.list.d/datastax.sources.list</send>
+                <send name="command" onFail="stop">curl -L https://debian.datastax.com/debian/repo_key | sudo apt-key add -</send>
+                <send name="command" onFail="stop">sudo apt-get update -y</send>
+                <send name="command" onFail="stop">sudo apt-get install -y --allow-unauthenticated dse-full</send>
+            </shell>
+        </method>
+        <goalProto name="buildDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="withMaven" symbol="goal" targetGoalType="buildDSEGNode">
+            <shell>
+                <describe locale="en_US">Build JanusGraph on <get>goal.node.public_ip_address</get> using Maven</describe>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>cd <get>agent.installDir</get>/janusgraph ; sudo mvn install -DskipTests | tee mvn_install.out</send>
+            </shell>                            
+        </method>
+        <goalProto name="configureDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="sed" symbol="goal" targetGoalType="configureDSEGNode">
+            <do>
+                <describe locale="en_US">Adjust cassandra.yaml to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:/etc/dse/cassandra/cassandra.yaml cassandra.yaml.original</send>
+                </shell>
+                <python>
+                    <code>
+import re
+fin = open('cassandra.yaml.original','r')
+fout = open('cassandra.yaml.fixed','w')
+seedString = ','.join([instance.private_ip_address for instance in <set>agent.seeds</set>])
+for line in fin:
+    # using private IP for seeds causes "Unable to gossip with any seeds" failure
+    line = re.sub('- seeds: "\S+"','- seeds: "%s"' % seedString,line)
+    line = re.sub('^(\#\s*)?listen_address: \S+','listen_address: <get>goal.node.private_ip_address</get>',line)
+    line = re.sub('^(\#\s*)?broadcast_rpc_address: \S+','broadcast_rpc_address: <get>goal.node.private_ip_address</get>',line)
+    # using public IP for rpc_address causes binding failure
+    line = re.sub('^(\#\s*)?rpc_address: \S+','rpc_address: 0.0.0.0',line)
+    line = re.sub('\# num_tokens:.*','num_tokens: 32',line)
+    # documentation says use fully-qualified Java class names for authenticator and authorizer, but that causes "class not found" failure 
+    line = re.sub('authenticator:.*','authenticator: PasswordAuthenticator',line)
+    line = re.sub('authorizer:.*','authorizer: CassandraAuthorizer',line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get>  cassandra.yaml.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml</send>
+                </shell>
+            </do>
+            <do>
+                <describe locale="en_US">Adjust cassandra-env.sh to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:/etc/dse/cassandra/cassandra-env.sh cassandra-env.sh.original</send>
+                </shell>
+                <python>
+                    <referenceDoc><url>https://www.liquidweb.com/kb/error-failed-to-connect-to-127-0-0-17199-connection-refused-cassandra-solved/</url></referenceDoc>
+                    <code>
+import re
+fin = open('cassandra-env.sh.original','r')
+fout = open('cassandra-env.sh.fixed','w')
+for line in fin:
+    line = line.decode('utf8')
+    line = re.sub('\# JVM_OPTS="\$JVM_OPTS -Djava.rmi.server.hostname=.*"','JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname=<get>goal.node.public_ip_address</get>"',line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> cassandra-env.sh.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra-env.sh.fixed /etc/dse/cassandra/cassandra-env.sh</send>
+                    <send name="command" onFail="stop">echo "-Dcassandra.ignore_dc=true" | sudo tee -a /etc/dse/cassandra/jvm.options</send>
+                    <send name="command" onFail="stop">echo "" | sudo tee -a /etc/default/dse</send>
+                    <send name="command" onFail="stop">echo "GRAPH_ENABLED=1" | sudo tee -a /etc/default/dse</send>
+                    <send name="command" onFail="stop">echo "system.graph('person_graph2').create()"| dse gremlin-console</send>
+                </shell>
+            </do>
+        </method>
+        <goalProto name="startDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="startUsingHelperScript" symbol="goal" targetGoalType="startDSEGNode">
+            <describe locale="en_US">Start Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>sudo service dse start</send>
+            </shell>                            
+        </method>
+        <goalProto name="stopDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="stopUsingHelperScript" symbol="goal" targetGoalType="stopDSEGNode">
+            <describe locale="en_US">Stop Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>sudo service dse stop</send>
+            </shell>                            
+        </method>
+        <goalProto name="setup" symbol="goal">
+            <describe locale="en-US">Allocate a cluster of EC2 nodes to run JanusGraph + Cassandra</describe>
+        </goalProto>
+        <method name="setupUsingBoto3" symbol="goal" targetGoalType="setup">
+            <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+            <pre><goalCompleted name="installEC2CLITools"/></pre>
+            <pre><goalCompleted name="installAnyJava"/></pre>
+            <do><goalCompleted name="generateSSHKeypair">
+                <variable name="sshCreds"><get>agent.sshCreds</get></variable>
+            </goalCompleted></do>
+            <python>
+                <describe>Load SSH keypair into AWS EC2</describe>
+                <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+bfile = open('<get>agent.sshCreds.publicKey.localFilePath</get>','rb')
+botoResource.import_key_pair(KeyName='<get>agent.sshCreds.keyName</get>',PublicKeyMaterial=bfile.read())
+                </code>
+            </python>
+            <python>
+                <describe>Request instances from EC2</describe>
+                <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+instances = botoResource.create_instances(KeyName='<get>agent.sshCreds.keyName</get>',InstanceType='<get>agent.config.dbNodes.instanceType</get>',ImageId='<get>agent.config.dbNodes.image</get>', MinCount=<get>agent.config.dbNodes.numNodes</get>, MaxCount=<get>agent.config.dbNodes.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>agent.config.dbNodes.securityGroupId</get>'],AssociatePublicIpAddress=True)])
+<set>agent.seeds</set> = []
+<set>agent.dsegInstances</set> = []
+
+if <get>agent.config.dbNodes.isCassandraNode</get>:
+    instance = instances[0]
+    instanceData = EC2Node(arg_id=instance.id,arg_public_ip_address=instance.public_ip_address,arg_private_ip_address=instance.private_ip_address)
+    <set>agent.seeds</set>.append(instanceData)
+index = 0
+for instance in instances:
+    instance.wait_until_running()
+    instance.load()
+    instanceName = '<get>agent.config.dbNodes.instancePrefix</get>%d' % index
+    instance.create_tags(Tags=[{'Key':'Name','Value':instanceName},{'Key':'experoOwner','Value':'<get>agent.ec2Creds.user</get>'},{'Key':'experoClusterName','Value':'<get>agent.clusterName</get>'}])
+    instanceData = EC2Node(arg_id=instance.id,arg_public_ip_address=instance.public_ip_address,arg_private_ip_address=instance.private_ip_address)
+    <set>agent.dsegInstances</set>.append(instanceData)
+    index += 1
+                </code>
+            </python>
+            <python>
+                <describe locale="en-US">Wait 180s for apt-get repositories on EC2 instances to stabilize</describe>
+                <code>
+import time
+time.sleep(180)
+                </code>
+            </python>
+            <find symbol="instance">
+                <describe>Install and build JanusGraph + Cassandra on each instance</describe>
+                <in><get>agent.dsegInstances</get></in>
+                <do>
+                    <goalCompleted name="installDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                    <goalCompleted name="buildDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+            <find symbol="instance">
+                <describe>Configure JanusGraph + Cassandra on each instance</describe>
+                <in><get>agent.dsegInstances</get></in>
+                <do>
+                    <goalCompleted name="configureDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+        </method>
+        <goalProto name="start" symbol="goal">
+            <describe locale="en-US">Start JanusGraph + Cassandra service daemons</describe>
+            <pre><defined><get>agent.config</get></defined></pre>
+            <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        </goalProto>
+        <method name="startCompound" symbol="goal" targetGoalType="start">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.dsegInstances</get></in>
+                    <do>
+                        <goalCompleted name="startDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+        </method>
+        <goalProto name="stop" symbol="goal">
+            <describe locale="en-US">Stop JanusGraph + Cassandra service daemons</describe>
+            <pre><defined><get>agent.config</get></defined></pre>
+            <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        </goalProto>
+        <method name="stopCompound" symbol="goal" targetGoalType="stop">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.dsegInstances</get></in>
+                    <do>
+                        <goalCompleted name="stopDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+        </method>
+        <goalProto name="terminate" symbol="goal">
+            <describe locale="en-US">Terminate all EC2 nodes to run JanusGraph + Cassandra for this agent</describe>
+        </goalProto>
+        <method name="terminateUsingBoto3" symbol="goal" targetGoalType="terminate">
+            <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+            <pre><goalCompleted name="installEC2CLITools"/></pre>
+            <do>
+            <find symbol="instance">
+                <describe>Terminate all EC2 instances used by this Agent</describe>
+                <in><get>agent.dsegInstances</get></in>
+                <do>
+                    <python>
+                        <describe>Terminate instance from EC2</describe>
+                        <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+botoInstance = botoResource.Instance('<get>instance.id</get>')
+print 'Sending terminate signal to id=%s private ip=%s' % ('<get>instance.id</get>','<get>instance.private_ip_address</get>')
 botoInstance.terminate()
                         </code>
                     </python>

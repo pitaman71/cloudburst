@@ -1000,7 +1000,7 @@ class Agent:
     def finalMode(self):
         return self.solver.args.final != None
 
-    def interpolateInner(self,context,elt,errHandler):
+    def interpolateInner(self,context,elt,execute,errHandler):
         cmd = ''
         if elt.text:
             cmd += elt.text
@@ -1008,7 +1008,7 @@ class Agent:
             if child.tag == 'describe' or child.tag == 'label':
                 pass
             elif ElementTree.iselement(child):
-                sub = Evaluator(self,context,None,False)
+                sub = Evaluator(self,context,None,execute)
                 sub.setXML(child)
                 sub.evaluate()
                 if sub.isSuccess():
@@ -1519,10 +1519,13 @@ class Evaluator:
             #info['file'] = file
             #info['path'] = file.name
             self.agent.tempFiles.append(file)
-            print >>file, self.agent.interpolateInner(self.context,self.expr,self)
+            print >>file, self.agent.interpolateInner(self.context,self.expr,self.executeMode,self)
             file.flush()
             interpreted = True
             self.value = file.name
+            if name != None:
+                resultNode = self.context.root.lookupTermList(True,['goal',name],self)
+                resultNode.setValue(file.name)
         elif self.expr.tag == 'python':
             funcName = None
             if 'name' in self.expr.attrib:
@@ -1940,7 +1943,7 @@ class Goal:
                         start = evaluator.getRvalue()
                         if start != None:
                             starts.append(evaluator.getRvalue())
-                        elif self.executeMode:
+                        elif executeMode:
                             self.createErrorAt(child,'<in> expression could not be evaluated')
                         else:
                             ambigStarts = True
@@ -2007,9 +2010,9 @@ class Goal:
             shellCommand = None
             for child in children:
                 if(child.tag == 'command'):
-                    shellCommand = self.agent.interpolateInner(self.context,child,self)
+                    shellCommand = self.agent.interpolateInner(self.context,child,executeMode,self)
                 if(child.tag == 'send'):
-                    cmd = self.agent.interpolateInner(self.context,child,self)
+                    cmd = self.agent.interpolateInner(self.context,child,executeMode,self)
                     cmdList = glob.glob(os.path.expanduser(cmd))
                     if len(cmdList) == 0:
                         cmdList = [cmd]
@@ -2062,7 +2065,7 @@ class Goal:
                         else:   
                             print "PLAN  %s" % cmd
                 elif(child.tag == 'receive'):
-                    cmd = self.agent.interpolateInner(self.context,child,self)
+                    cmd = self.agent.interpolateInner(self.context,child,executeMode,self)
 
                     print "EXPECT %s" % cmd
                     if self.hasErrors():
