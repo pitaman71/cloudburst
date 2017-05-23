@@ -1226,8 +1226,8 @@ for line in fin:
     line = re.sub('^(\#\s*)?rpc_address: \S+','rpc_address: 0.0.0.0',line)
     line = re.sub('\# num_tokens:.*','num_tokens: 32',line)
     # documentation says use fully-qualified Java class names for authenticator and authorizer, but that causes "class not found" failure 
-    line = re.sub('authenticator:.*','authenticator: PasswordAuthenticator',line)
-    line = re.sub('authorizer:.*','authorizer: CassandraAuthorizer',line)
+    line = re.sub('authenticator:.*','authenticator: AllowAllAuthenticator',line)
+    line = re.sub('authorizer:.*','authorizer: AllowAllAuthorizer',line)
     fout.write(line)
                     </code>
                 </python>
