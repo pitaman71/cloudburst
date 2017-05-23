@@ -27,7 +27,7 @@ def run(command):
 if argObj.clean:
     for item in glob.glob('%s/.cloudburst/data/*' % os.environ['HOME']):
         run('rm -f %s' % item)
-run('%s/cli.py load %s/cassandraExperiment.xml' % (argObj.cloudburstHome,argObj.cloudburstHome))
+run('%s/cli.py load %s/graphStacker.xml' % (argObj.cloudburstHome,argObj.cloudburstHome))
 run('%s/cli.py launch test1 helloWorld' % argObj.cloudburstHome)
 run('%s/cli.py inspect agentByName' % argObj.cloudburstHome)
 run('%s/cli.py launch test2 helloWorld' % argObj.cloudburstHome)

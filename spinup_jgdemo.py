@@ -32,7 +32,7 @@ def run(command):
 if argObj.clean:
     for item in glob.glob('%s/.cloudburst/data/*' % os.environ['HOME']):
         run('rm -f %s' % item)
-run('%(cloudburstHome)s/cli.py load %(cloudburstHome)s/cassandraExperiment.xml' % args)
+run('%(cloudburstHome)s/cli.py load %(cloudburstHome)s/graphStacker.xml' % args)
 run('%(cloudburstHome)s/cli.py launch %(name)s JanusGraphClusterDemo agent.clusterName=%(name)s agent.ec2Creds=AlanExperoOnEC2 agent.config=JanusGraphClusterDemo' % args)
 run('%(cloudburstHome)s/cli.py -n execute -e -v 1 %(name)s setup' % args)
 run('%(cloudburstHome)s/cli.py -n inspect %(name)s' % args)

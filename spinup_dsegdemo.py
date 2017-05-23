@@ -33,7 +33,7 @@ def run(command):
 if argObj.clean:
     for item in glob.glob('%s/.cloudburst/data/*' % os.environ['HOME']):
         run('rm -f %s' % item)
-run('%(cloudburstHome)s/cli.py load %(cloudburstHome)s/cassandraExperiment.xml' % args)
+run('%(cloudburstHome)s/cli.py load %(cloudburstHome)s/graphStacker.xml' % args)
 run('%(cloudburstHome)s/cli.py launch %(name)s DSEGClusterDemo agent.clusterName=%(name)s agent.dseCreds=AlanDatastaxCredentials agent.githubCreds=AlanGithubCredentials agent.ec2Creds=AlanExperoOnEC2 agent.config=DSEGDemoClusterConfig' % args)
 run('%(cloudburstHome)s/cli.py -n %(extra)s execute %(name)s setup' % args)
 run('%(cloudburstHome)s/cli.py -n %(extra)s inspect %(name)s' % args)
