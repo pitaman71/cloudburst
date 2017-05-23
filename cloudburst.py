@@ -146,7 +146,7 @@ def lookupRelPath(obj,defnPath):
         if index < 0 or index >= len(obj):
             return None
         return lookupRelPath(obj[index],defnPath[1:])
-    if hasattr(obj,defnPath[0]):
+    if type(defnPath[0]) == str and hasattr(obj,defnPath[0]):
         return lookupRelPath(getattr(obj,defnPath[0]),defnPath[1:])
     if hasattr(obj,'lookupRelPath'):
         return obj.lookupRelPath(defnPath)
@@ -504,6 +504,8 @@ class Definitions:
             code += '   def __init__(%s):\n' % (','.join(['self'] + ['arg_%s=None' % memberName for memberName in members.keys()]))
             for memberName in members.keys():
                 code += '      self.%s = arg_%s\n' % (memberName,memberName)
+            for memberName in members.keys():
+                code += '      self.reset_%s = arg_%s\n' % (memberName,memberName)
             if len(members) == 0:
                 code += '      pass\n'
             code += '\n'
@@ -517,6 +519,19 @@ class Definitions:
             if len(members) == 0:
                 code += '      pass\n'
             code += '      return result\n'
+            code += '\n'
+            code += '   def copyFrom(self,other,doAssign=False):\n'
+            for memberName in members.keys():
+                code += '      if hasattr(other,\'%s\'):\n' % memberName
+                code += '         self.%s = other.%s\n' % (memberName,memberName)
+            if len(members) == 0:
+                code += '      pass\n'
+            code += '\n'
+            code += '   def reset(self):\n'
+            for memberName in members.keys():
+                code += '      self.%s = self.reset_%s\n' % (memberName,memberName)
+            if len(members) == 0:
+                code += '      pass\n'
             code += '\n'
 
 #            print 'DEBUG: defining class\n%s\n' % code
@@ -1362,12 +1377,12 @@ class Evaluator:
                 else:
                     self.doUnaryOperator(self.expr.get('name'),childResults[0])
         elif self.expr.tag == 'get':
-            try:
-                self.value = self.context.root.lookupString(False,self.expr.text,self)
-                if self.value == None:
-                    self.outcome = self.outcome and EvalOutcomes().setFalse()
-            except Exception as e:
-                raise RuntimeError('%s:%d - (%s) %s' % (self.expr._file_name,self.expr._start_line_number,self.expr.text,str(e)))
+#            try:
+            self.value = self.context.root.lookupString(False,self.expr.text,self)
+            if self.value == None:
+                self.outcome = self.outcome and EvalOutcomes().setFalse()
+#            except Exception as e:
+#                raise RuntimeError('%s:%d - (%s) %s' % (self.expr._file_name,self.expr._start_line_number,self.expr.text,str(e)))
             interpreted = True
         elif self.expr.tag == 'set':
 #            self.value = self.expr.text
@@ -2441,11 +2456,11 @@ class ConfigNode:
     def getAttr(self,attr):
         if self.assigned != None:
             return self.assigned.getAttr(attr)
-        elif hasattr(self,attr):
+        elif type(attr) == str and hasattr(self,attr):
             return getattr(self,attr)
         elif self.fields != None and attr in self.fields:
             return self.fields[attr]
-        elif hasattr(self.selected,attr):
+        elif type(attr) == str and hasattr(self.selected,attr):
             return getattr(self.selected,attr)
         else:
             raise 'Attribute %s is undefined in %s' % (attr,self.getFullPath('.'))
@@ -2463,12 +2478,12 @@ class ConfigNode:
 
     def getElement(self,key):
         if self.selected != None:
-            if isinstance(self.selected,dict):
+            if isinstance(self.selected,list):
                 return self.selected[key]
-            elif hasattr(self.selected,key):
+            elif type(key) == str and hasattr(self.selected,key):
                 return getattr(self.selected,key)
             else:
-                raise 'getElement : Attribute %s is undefined in %s' % (attr,self.getFullPath('.'))
+                raise RuntimeError('getElement : Element key %s is undefined in %s' % (key,self.getFullPath('.')))
         if self.elements == None:
             raise RuntimeError('%s is not defined as a list with elements' % self.getPath('.'))
         return self.elements[key]
@@ -2561,10 +2576,10 @@ class ConfigNode:
 #            print 'DEBUG: no more path terms'
         elif pathTerms[0] == '':
             if errHandler != None: errHandler.createError('empty field name at %s' % self.getPath('.'))
-        elif len(pathTerms) == 1 and self.selected != None:
+        elif self.selected != None:
             if isinstance(self.selected,dict):
                 result = self.selected[pathTerms[0]]
-            elif hasattr(self.selected,pathTerms[0]):
+            elif type(pathTerms[0]) == str and hasattr(self.selected,pathTerms[0]):
                 result = getattr(self.selected,pathTerms[0])
             elif errHandler != None: errHandler.createError('%s is neither a dict nor an object but is %s' % (self.getPath('.'),self.selected))
         else:
