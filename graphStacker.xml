@@ -83,6 +83,7 @@
             <variable name="securityGroupId" type="string">sg-6ddab604</variable>
             <variable name="isJanusGraphNode" type="bool">True</variable>
             <variable name="isCassandraNode" type="bool">True</variable>
+            <variable name="isMicroserviceNode" type="bool">True</variable>
         </struct>
     </struct>
     <goalProto name="test1" symbol="goal">
@@ -1143,36 +1144,9 @@ botoInstance.terminate()
         <goalProto name="installDSEGNode">
             <variable name="node" type="EC2Node"/>
         </goalProto>
-        <method name="fromDatastax" symbol="goal" targetGoalType="installDSEGNode">
-            <tempFile name="dataStaxYumRepo">
-                <describe locale="en_US">Create temp file with YUM repository entry for datastax</describe>
-[datastax]
-name = DataStax Repo for DataStax Enterprise
-baseurl=https://<get>agent.dseCreds.user</get>:<python name="urllib.quote_plus"><get>agent.dseCreds.password</get></python>@rpm.datastax.com/enterprise
-enabled=1
-gpgcheck=0
-            </tempFile>
+        <method name="fromDatastaxApt" symbol="goal" targetGoalType="installDSEGNode">
             <shell>
-                <describe locale="en_US">Copy YUM repository entry file to <get>goal.node.public_ip_address</get> using scp</describe>
-                <label>cpYumConfigForDatastax</label>
-
-                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>goal.dataStaxYumRepo</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:datastax.repo
-                </send>
-            </shell>
-            <shell>
-                <describe locale="en_US">Make sure YUM program is installed on <get>goal.node.public_ip_address</get> using apt-get</describe>
-                <label>installYum</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                <send name="command" onFail="stop">sudo apt-get --assume-yes install yum*</send>
-            </shell>
-            <shell>
-                <describe locale="en_US">Move datastax YUM repo to /etc using sudo</describe>
-                <label>copyDSEReposFile</label>
-                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                <send name="command" onFail="stop">sudo cp ~<get>agent.sshCreds.user</get>/datastax.repo /etc/yum/repos.d/</send>
-            </shell>
-            <shell>
-                <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.public_ip_address</get> using yum</describe>
+                <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.public_ip_address</get> using apt-get</describe>
                 <label>installJava1.8</label>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                 <send name="command" onFail="stop">sudo apt-add-repository ppa:webupd8team/java -y</send>
@@ -1183,7 +1157,7 @@ gpgcheck=0
                 <send name="command" onFail="stop">sudo java -version</send>
             </shell>
             <shell>
-                <describe locale="en_US">Make sure DSE full product package is installed on <get>goal.node.public_ip_address</get> using yum</describe>
+                <describe locale="en_US">Make sure DSE full product package is installed on <get>goal.node.public_ip_address</get> using apt-get</describe>
                 <label>installDSE</label>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                 <send name="command" onFail="stop">echo "deb https://<get>agent.dseCreds.user</get>:<python name="urllib.quote_plus"><get>agent.dseCreds.password</get></python>@debian.datastax.com/enterprise stable main" | sudo tee -a /etc/apt/sources.list.d/datastax.sources.list</send>
@@ -1191,6 +1165,35 @@ gpgcheck=0
                 <send name="command" onFail="stop">sudo apt-get update -y</send>
                 <send name="command" onFail="stop">sudo apt-get install -y --allow-unauthenticated dse-full</send>
             </shell>
+            <do>
+                <describe locale="en_US">Make sure Python PIP and pyyaml are installed on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo apt-get -y install python-pip</send>
+                    <send name="command" onFail="stop">sudo pip install pyyaml pexpect flask gremlinpython</send>
+                </shell>
+            </do>
+            <tempFile name="netrc">
+                <describe locale="en_US">Create temp file with netrc for github</describe>
+machine github.com
+  login <get>agent.githubCreds.user</get>
+  password <get>agent.githubCreds.password</get>
+            </tempFile>
+            <shell>
+                <describe locale="en_US">Copy Netrc credentials file to <get>goal.node.public_ip_address</get> using scp</describe>
+                <label>cpYumConfigForDatastax</label>
+
+                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>goal.netrc</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:~/.netrc
+                </send>
+            </shell>
+            <do>
+                <describe locale="en_US">Create installation directory and clone microservice repository</describe>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mkdir -p <get>agent.installDir</get></send>
+                    <send name="command" onFail="stop">cd <get>agent.installDir</get> ; sudo git clone --recursive https://github.com/experoinc/graph-gallery-demos.git</send>
+                </shell>
+            </do>
         </method>
         <goalProto name="buildDSEGNode">
             <variable name="node" type="EC2Node"/>
@@ -1199,7 +1202,7 @@ gpgcheck=0
             <shell>
                 <describe locale="en_US">Build Datastax Enterprise Graph on <get>goal.node.public_ip_address</get> using Maven</describe>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                <send>cd <get>agent.installDir</get>/janusgraph ; sudo mvn install -DskipTests | tee mvn_install.out</send>
+                <send>echo "nothing to do for build"</send>
             </shell>                            
         </method>
         <goalProto name="configureDSEGNode">
@@ -1262,6 +1265,7 @@ for line in fin:
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                     <send name="command" onFail="stop">sudo mv cassandra-env.sh.fixed /etc/dse/cassandra/cassandra-env.sh</send>
+                    <send name="command" onFail="stop">echo "-Dcassandra.consistent.rangemovement=false" | sudo tee -a /etc/dse/cassandra/jvm.options</send>
                     <send name="command" onFail="stop">echo "-Dcassandra.ignore_dc=true" | sudo tee -a /etc/dse/cassandra/jvm.options</send>
                     <send name="command" onFail="stop">echo "" | sudo tee -a /etc/default/dse</send>
                     <send name="command" onFail="stop">echo "GRAPH_ENABLED=1" | sudo tee -a /etc/default/dse</send>
@@ -1271,11 +1275,13 @@ for line in fin:
         <goalProto name="startDSEGNode">
             <variable name="node" type="EC2Node"/>
         </goalProto>
+        <post><op name="isZero"><shell value="returnCode"><send name="command" onFail="stop">sudo service dse status &gt; /dev/null</send></shell></op></post>
         <method name="startUsingHelperScript" symbol="goal" targetGoalType="startDSEGNode">
             <describe locale="en_US">Start Cassandra+Datastax Enterprise Graph service daemons on <get>goal.node.public_ip_address</get></describe>
             <shell>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                 <send>sudo service dse start</send>
+                <send>sudo nohup <get>agent.installDir</get>/graph-gallery-demos/hello-graph/appServer/hgFlask.py <get>agent.installDir</get>/graph-gallery-demos/finserv-graph-demo/src/finservGraphDemo.yaml --gremlin --server localhost:8182 --traversalSource finservGraphDemo.g &gt; finservGraphDemo.out 2&gt; finservGraphDemo.err &amp;</send>
             </shell>                            
         </method>
         <goalProto name="schemaDSEG">
@@ -1286,9 +1292,7 @@ for line in fin:
                 <describe locale="en_US">Create Graph and load Schema into DSE Graph</describe>
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                    <send name="command" onFail="stop">sudo mkdir -p <get>agent.installDir</get></send>
-                    <send name="command" onFail="stop">cd <get>agent.installDir</get> ; sudo git clone https://<get>agent.githubCreds.user</get>:<python name="urllib.quote_plus"><get>agent.githubCreds.password</get></python>@github.com/experoinc/graph-gallery-demos.git</send>
-                    <send name="command" onFail="stop">cd <get>agent.installDir</get> ; hello-graph/tools/tools/hgToDSEGSchema.py ../protrac/protrac.hg.yaml | sudo tee schema.groovy</send>
+                    <send name="command" onFail="stop">cd <get>agent.installDir</get> ; graph-gallery-demos/hello-graph/tools/hgToDSEGSchema.py graph-gallery-demos/finserv-graph-demo/src/finservGraphDemo.yaml | sudo tee schema.groovy</send>
                     <send name="command" onFail="stop">cd <get>agent.installDir</get> ; cat schema.groovy | dse gremlin-console</send>
                 </shell>
             </do>
@@ -1387,6 +1391,29 @@ time.sleep(180)
                 </do>
             </find>                
         </method>
+        <goalProto name="schema" symbol="goal">
+            <describe locale="en-US">Load schema into graph DB</describe>
+        </goalProto>
+        <method name="schemaCompound" symbol="goal" targetGoalType="schema">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.dsegInstances</get></in>
+                    <do>
+                        <goalCompleted name="startDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+            <do>
+                <goalCompleted name="schemaDSEG">
+                    <variable name="node" type="EC2Node"><get>agent.seeds[0]</get></variable>
+                </goalCompleted>
+            </do>
+        </method>
         <goalProto name="start" symbol="goal">
             <describe locale="en-US">Start Datastax Enterprise Graph + Cassandra service daemons</describe>
             <pre><defined><get>agent.config</get></defined></pre>
@@ -1405,16 +1432,6 @@ time.sleep(180)
                         </goalCompleted>
                     </do>
                 </find>                
-            </do>
-        </method>
-        <goalProto name="schema" symbol="goal">
-            <describe locale="en-US">Load schema into graph DB</describe>
-        </goalProto>
-        <method name="schemaCompound" symbol="goal" targetGoalType="schema">
-            <do>
-                <goalCompleted name="schemaDSEG">
-                    <variable name="node" type="EC2Node"><get>agent.seeds[0]</get></variable>
-                </goalCompleted>
             </do>
         </method>
         <goalProto name="stop" symbol="goal">
@@ -1455,7 +1472,7 @@ import boto3
 botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
 botoResource = botoSession.resource('ec2')
 botoInstance = botoResource.Instance('<get>instance.id</get>')
-print 'Sending terminate signal to id=%s private ip=%s' % ('<get>instance.id</get>','<get>instance.private_ip_address</get>')
+print 'Sending terminate signal to EC2 via boto3 for instance id=%s with private ip=%s' % ('<get>instance.id</get>','<get>instance.private_ip_address</get>')
 botoInstance.terminate()
                         </code>
                     </python>
