@@ -1414,6 +1414,14 @@ time.sleep(180)
                 </goalCompleted>
             </do>
         </method>
+        <goalProto name="ssh" symbol="goal">
+            <describe locale="en-US">Connect to one of the servers</describe>
+        </goalProto>
+        <method name="usingSSH" symbol="goal" targetGoalType="ssh">
+            <shell>
+                <send>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>agent.seeds[0]</get></send>
+            </shell>
+        </method>
         <goalProto name="start" symbol="goal">
             <describe locale="en-US">Start Datastax Enterprise Graph + Cassandra service daemons</describe>
             <pre><defined><get>agent.config</get></defined></pre>
