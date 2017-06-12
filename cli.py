@@ -14,6 +14,7 @@ parser.add_argument('--echo','-e',action='count',help='Echo external commands (e
 parser.add_argument('--lines','-l',action='count',help='Print cloudburst program line numbers with all trace messages')
 parser.add_argument('--initial','-i',action='count',help='Print initial state of cloudburst agency after loading programs')
 parser.add_argument('--final','-f',action='count',help='Print final state of cloudburst agency after executing/solving goals')
+parser.add_argument('--db',help='URL for Agency DB',default=None)
 subparsers = parser.add_subparsers(dest='subcommand')
 
 loadCmd = subparsers.add_parser('load',help='Load Cloudburst definitions from file')

@@ -7,6 +7,86 @@ import datetime
 
 import sys
 
+class Crate:
+    def __init__(self):
+        self.typeName = None
+        self.refName = None
+        self.defName = None
+        self.members = None
+        self.stackRef = None
+
+    def hasTypeName(self):
+        return self.typeName != None
+
+    def getTypeName(self):
+        return self.typeName
+
+    def setTypeName(self,typeName):
+        self.typeName = typeName
+
+    def hasRefName(self):
+        return self.refName != None
+
+    def getRefName(self):
+        return self.refName
+
+    def setRefName(self,refName):
+        self.refName = refName
+
+    def hasDefName(self):
+        return self.defName != None
+
+    def getDefName(self):
+        return self.defName
+
+    def setDefName(self,defName):
+        self.defName = defName
+
+    def hasMembers(self):
+        return self.members != None
+
+    def getMembers(self):
+        return self.members
+
+    def setMembers(self,members):
+        self.members = members
+
+    def hasStackRef(self):
+        return self.stackRef != None
+
+    def getStackRef(self):
+        return self.stackRef
+
+    def setStackRef(self,stackRef):
+        self.stackRef = stackRef
+
+    def propertyMap(self):
+        return { 'typeName': '__type__', 'refName': '__ref__', 'defName': '__def__', 'members': '__members__', 'stackRef': '__stack__'}
+
+    def toJSON(self):
+        result = dict()
+        propertyMap = self.propertyMap()
+        for attrName,propName in propertyMap.iteritems():
+            value = getattr(self,attrName)
+            if value != None:
+                result[propName] = getattr(self,attrName)
+        return result
+
+    def isJSON(self,json):
+        propertyMap = self.propertyMap()
+        for attrName,propName in propertyMap.iteritems():
+            if propName in json:
+                return True
+        return False
+
+    def fromJSON(self,json):
+        propertyMap = self.propertyMap()
+        for attrName,propName in propertyMap.iteritems():
+            setattr(self,attrName,json.get(propName))
+
+    def __str__(self):
+        return str(self.__dict__)
+
 class Shipper:
     """ Base class for a reversible object packing/unpacking process that can be used to implement object persistence or
     shared consistency. The "pack" operation takes a Python data structure and converts it to a serialization-friendly 
@@ -102,31 +182,28 @@ class Shipper:
         return self.postUnpackObject(tmp,False,[])
 
     def unpackByType(self,rep,stack,typeName):
-        obj = None
-        if typeName == 'StackRefType':
-            obj = stack[rep['depth']]
-        else:
-            obj = self.create(typeName,rep)
-            if obj == None:
-                raise RuntimeError('Cannot locate class definition for %s along path %s' % (typeName,','.join([str(stack[len(stack) - i - 1]) for i in range(0,len(stack))])))
-            stack.append(obj)
-            members = dict()
-            if 'members' in rep:
-                for key,value in rep['members'].iteritems():
-                    self.debugMessage('unpackObject key %s' % str(key))
-                    members[key] = self.unpackObject(value,stack)
-            obj.__dict__ = members
-            if '__def__' in rep:
-                self.defByName[rep['__def__']] = obj
-                self.defByOrder.append(obj)
-            stack.pop()
+        obj = self.create(typeName,rep)
+        if obj == None:
+            raise RuntimeError('Cannot locate class definition for %s along path %s' % (typeName,','.join([str(stack[len(stack) - i - 1]) for i in range(0,len(stack))])))
+        stack.append(obj)
+        members = dict()
+        if rep.hasMembers():
+            rawMembers = rep.getMembers()
+            for key,value in rawMembers.iteritems():
+                self.debugMessage('unpackObject key %s' % str(key))
+                members[key] = self.unpackObject(value,stack)
+        obj.__dict__ = members
+        if rep.hasDefName():
+            self.defByName[rep.getDefName()] = obj
+            self.defByOrder.append(obj)
+        stack.pop()
         return obj
 
     def unpackObject(self,rep,stack):
         objType = str(rep)
-        if isinstance(rep,dict) and '__type__' in rep:
-            objType = rep['__type__']
-        myTask = task.Task(('unpackObject of type %s' % objType),logger=self.serializationLog)
+        if isinstance(rep,Crate) and rep.hasTypeName():
+            objType = rep.getTypeName()
+        myTask = task.Task(('unpackObject of type %s' % objType),logMethod=self.serializationLog.info(self.serializationLog))
         obj = None
         if rep == None:
             pass
@@ -138,24 +215,24 @@ class Shipper:
             if type(rep) == tuple:
                 obj = tuple(obj)
             stack.pop()
-        elif type(rep) == dict:
-            if '__ref__' in rep:
+        elif isinstance(rep,Crate):
+            if rep.hasRefName():
 #                    print 'REFERENCE %s' % rep['__ref__']
-                obj = self.lookupKey(rep['__ref__'])
+                obj = self.lookupKey(rep.getRefName())
                 if obj == None:
                     obj = rep
-            elif '__stack__' in rep:
-                selected = len(stack) - int(rep['__stack__'])
+            elif rep.hasStackRef():
+                selected = len(stack) - int(rep.getStackRef())
 #                    print 'DEBUG: stack seeking type %s' % rep['__type__']
 #                    for index in range(0,len(stack)):
 #                        print 'DEBUG: stack[%d] = %s %s' % (index,stack[index],'SELECTED' if index == selected else '')
                 obj = stack[selected]
-            elif '__type__' in rep:
-                typeName = rep['__type__']
+            elif rep.hasTypeName():
+                typeName = rep.getTypeName()
                 obj = None
                 created = False
-                if '__def__' in rep and rep['__def__'] in self.defByName:
-                    obj = self.defByName[rep['__def__']]
+                if rep.hasDefName() and rep.getDefName() in self.defByName:
+                    obj = self.defByName[rep.getDefName()]
                 if obj == None:
                     obj = self.create(typeName,rep)
                     created = True
@@ -164,24 +241,24 @@ class Shipper:
                 stack.append(obj)
                 if created and hasattr(obj,'beforeUnpack'):
                     created.beforeUnpack()
-                members = self.unpackObject(rep['__members__'],stack)
+                members = self.unpackObject(rep.getMembers(),stack)
                 self.mergeMembers(obj,members)
-                if '__def__' in rep:
+                if rep.hasDefName():
 #                        print 'DEFINE %s' % rep['__def__']
-                    self.defByName[rep['__def__']] = obj
+                    self.defByName[rep.getDefName()] = obj
                     self.defOrder.append(obj)
                 if obj != None and hasattr(obj,'afterUnpack'):
                     obj.afterUnpack()
                 stack.pop()
-            else:
-                obj = dict()
-                stack.append(obj)
-                keyOrder = self.attributeOrder(rep,stack)
-                for key in keyOrder:
-                    value = rep[key]
-                    myTask.info('unpackObject key %s' % str(key))
-                    obj[key] = self.unpackObject(value,stack)
-                stack.pop()
+        elif type(rep) == dict:
+            obj = dict()
+            stack.append(obj)
+            keyOrder = self.attributeOrder(rep,stack)
+            for key in keyOrder:
+                value = rep[key]
+                myTask.info('unpackObject key %s' % str(key))
+                obj[key] = self.unpackObject(value,stack)
+            stack.pop()
         else:
             myTask.info('unpackObject value %s' % str(rep))
             obj = rep
@@ -190,8 +267,8 @@ class Shipper:
 
     def postUnpackObject(self,obj,nextRefIsDef,stack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
-#        myTask = task.Task(('postUnpackObject of type %s' % objType),logger=self.serializationLog)
-        myTask = task.Task('postUnpackObject of type %s' % objType,logger=True)
+#        myTask = task.Task(('postUnpackObject of type %s' % objType),logMethod==self.serializationLog.info(self.serializationLog))
+        myTask = task.Task('postUnpackObject of type %s' % objType,logMethod=self.serializationLog.info(self.serializationLog))
 
         result = None
         stack.append(obj)
@@ -202,28 +279,29 @@ class Shipper:
             result = []
             for item in obj:
                 result.append(self.postUnpackObject(item,nextRefIsDef,stack))
-        elif type(obj) == dict:
-            if '__ref__' in obj:
+        elif isinstance(obj,Crate):
+            if not obj.hasRefName():
+                raise RuntimeError('Unexpected to have a packed crate without refName' % obj)
 #                print 'DEBUG: cross reference %s' % obj['__ref__']
-                the = self.lookupKey(obj['__ref__'])
-                if the == None:
-                    raise RuntimeError('Unable to resolve reference %se' % obj)
-                myTask.info('postUnpackObject resolved %s to %s' % (obj['__ref__'],the))
-                result = the
-                if id(result) not in self.pointers:
-                    self.pointers[id(result)] = True
-                    stack.append(the)
-                    self.postUnpackObject(result.__dict__,False,stack)
-                    stack.pop()
-            else:
-                result = dict()
-                keyOrder = self.attributeOrder(obj,stack)
-                if 'lock' in keyOrder:
-                    raise RuntimeError('ERROR: lock is in keyOrder for %s\n*** %s' % (obj,'\n*** '.join([str(obj) for obj in stack])))
-                for key in keyOrder:
-                    value = obj[key]
-                    myTask.info('postUnpackObject follows key %s' % str(key))
-                    result[key] = self.postUnpackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+            the = self.lookupKey(obj.getRefName())
+            if the == None:
+                raise RuntimeError('Unable to resolve reference %s' % obj)
+            myTask.info('postUnpackObject resolved %s to %s' % (obj.getRefName(),the))
+            result = the
+            if id(result) not in self.pointers:
+                self.pointers[id(result)] = True
+                stack.append(the)
+                self.postUnpackObject(result.__dict__,False,stack)
+                stack.pop()
+        elif type(obj) == dict:
+            result = dict()
+            keyOrder = self.attributeOrder(obj,stack)
+            if 'lock' in keyOrder:
+                raise RuntimeError('ERROR: lock is in keyOrder for %s\n*** %s' % (obj,'\n*** '.join([str(obj) for obj in stack])))
+            for key in keyOrder:
+                value = obj[key]
+                myTask.info('postUnpackObject follows key %s' % str(key))
+                result[key] = self.postUnpackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
         elif self.packAsScalar(obj):
             myTask.info('postUnpackObject value %s' % str(obj))
             result = obj
@@ -260,7 +338,7 @@ class Shipper:
 
     def prepackObject(self,obj,nextRefIsDef,stack,keyStack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
-        myTask = task.Task('prepackObject of type %s' % objType,logger=self.serializationLog)
+        myTask = task.Task('prepackObject of type %s' % objType,logMethod=self.serializationLog.info(self.serializationLog))
         if objType == 'ResourceModel':
             message = 'ResourceModel object serialized\n'
             for i in range(0,len(stack)):
@@ -310,7 +388,7 @@ class Shipper:
 
     def packObject(self,obj,nextRefIsDef,stack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
-        myTask = task.Task(('packObject of type %s' % objType),logger=self.serializationLog)
+        myTask = task.Task(('packObject of type %s' % objType),logMethod=self.serializationLog.info(self.serializationLog))
         result = None
 
         if not hasattr(obj,'getDefnPath'):
@@ -319,9 +397,9 @@ class Shipper:
             obj.getDefnPath(self.defnPathStack)
 
         if obj in stack:
-            result = dict()
-            result['__type__'] = self.getType(obj)
-            result['__stack__']=len(stack) - stack.index(obj)
+            result = Crate()
+            result.setTypeName(self.getType(obj))
+            result.setStackRef(len(stack) - stack.index(obj))
         else:
             stack.append(obj)
             if obj == None:
@@ -354,25 +432,35 @@ class Shipper:
                 key = self.getKey(obj)
                 if not nextRefIsDef:
                     myTask.info('packObject REF %s' % str(key))
-                    result = dict()
-                    result['__ref__']=key
-                    result['__type__']=self.getType(obj)
+                    result = Crate()
+                    result.setRefName(key)
+                    result.setTypeName(self.getType(obj))
                 else:
                     myTask.info('packObject DEF %s' % str(key))
-                    result = dict()
-                    result['__def__']=key
-                    result['__type__']=self.getType(obj)
-                    result['__members__'] = self.packObject(obj.__dict__,False,stack)
+                    result = Crate()
+                    result.setDefName(key)
+                    result.setTypeName(self.getType(obj))
+                    result.setMembers(self.packObject(obj.__dict__,False,stack))
             elif id(obj) in self.pointers:
                 myTask.info('skip object of type %s' % (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj)))
                 pass
 #                    raise RuntimeError('Recursion detected on object %s' % obj)
             else:
                 self.pointers[id(obj)] = True
-                result = dict()
-                result['__type__']=self.getType(obj)
-                result['__members__'] = self.packObject(obj.__dict__,False,stack)
+                result = Crate()
+                result.setTypeName(self.getType(obj))
+                result.setMembers(self.packObject(obj.__dict__,False,stack))
             stack.pop()
         return result
 
+    def toJSON(self,rep):
+        if isinstance(rep,Crate):
+            return rep.toJSON()
+        raise RuntimeError('Unable to serialize %s' % type(rep))
 
+    def fromJSON(self,json):
+        tmp = Crate()
+        if tmp.isJSON(json):
+            tmp.fromJSON(json)
+            return tmp
+        return json

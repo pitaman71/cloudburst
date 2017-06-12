@@ -55,6 +55,9 @@ Element = ElementTree.Element
 def toBool(rvalue):
     return rvalue != False and rvalue != 0 and rvalue != 'false' and rvalue != 'False' and rvalue != 'FALSE'
 
+def logStderr(text):
+    sys.stderr.write('%s\n' % text)
+
 def xmlCopy(source):
     target = ElementTree.Element(source.tag)
     target._file_name = source._file_name
@@ -263,15 +266,15 @@ class Shipper(shipper.Shipper):
         if hasattr(sys.modules[__name__],typeName):
             klass = getattr(sys.modules[__name__],typeName)
             if klass == Config:
-                members = rep['__members__']
+                members = rep.getMembers()
                 obj = klass(members['name'],members['desc'],self.solver)
             elif klass == ConfigNode:
-                members = rep['__members__']
+                members = rep.getMembers()
                 obj = klass(None,members['name'])
             elif klass == Agent:
                 obj = klass(self.solver)
             elif klass == Element:
-                members = rep['__members__']
+                members = rep.getMembers()
                 obj = klass(members['tag'])
             else:
                 obj = klass()
@@ -601,7 +604,7 @@ class Agency:
         shipper = Shipper(self)
         shipper.addValue(self)
         shipper.prepack()
-        print >>fp,json.dumps(shipper.packValues())
+        print >>fp,json.dumps(shipper.packValues(),default=shipper.toJSON)
         fp.close()
         shutil.move(tempFile,finalFile)
         self.lock.release()
@@ -699,14 +702,14 @@ class Agency:
         return self.args.final != None
 
     def readState(self,stateFile):
-        if self.verboseMode(1):
-            print 'BEGIN Agency %s loading persistent state from %s' % (self.name,self.persistentPath)
+        purpose = 'Agency %s loading persistent state from %s' % (self.name,self.persistentPath)
+        task1 = task.Task(purpose=purpose,logMethod=logStderr)
 
         self.lock.acquire()
         fp = open(stateFile,'rt')
         shipper = Shipper(self)
         shipper.prepareForMerge()
-        rep = json.load(fp)
+        rep = json.load(fp,object_hook=shipper.fromJSON)
 
         doppel = shipper.unpack(rep)
 #        print 'DEBUG: loaded %s' % doppel
@@ -714,9 +717,6 @@ class Agency:
             raise RuntimeError('merge failed in Agency.readState')
         fp.close()        
         self.lock.release()
-
-        if self.verboseMode(1):
-            print 'END   Agency %s loading persistent state from %s' % (self.name,self.persistentPath)
 
 
     def readFileXML(self,programFile,mandatory=True):
@@ -1338,7 +1338,7 @@ class Evaluator:
         if 'debug' in self.expr.attrib:
             myTask = task.Task('%s: evaluating expression %s' % (self.label,self.expr.tag))
         else:
-            myTask = task.Task('%s: evaluating expression %s' % (self.label,self.expr.tag),logger=None)
+            myTask = task.Task('%s: evaluating expression %s' % (self.label,self.expr.tag))
         childResults = []
         if self.expr.text:
             sub = Evaluator(self.agent,self.context,self.pursue,self.executeMode)
