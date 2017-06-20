@@ -12,11 +12,13 @@ scriptPath = os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser(description="Cloudburst test #2")
 parser.add_argument('--name',default='dsegdemo1')
+parser.add_argument('--branch',default='develop')
 parser.add_argument('--clean',default=False,action='store_true')
 argObj = parser.parse_args()
 
 args = dict()
 args['name'] = argObj.name
+args['branch'] = argObj.branch
 args['cloudburstHome'] = scriptPath
 args['extra'] = '-g'
 
@@ -34,8 +36,9 @@ if argObj.clean:
     for item in glob.glob('%s/.cloudburst/data/*' % os.environ['HOME']):
         run('rm -f %s' % item)
 run('%(cloudburstHome)s/cli.py load %(cloudburstHome)s/graphStacker.xml' % args)
-run('%(cloudburstHome)s/cli.py launch %(name)s DSEGClusterDemo agent.clusterName=%(name)s agent.dseCreds=AlanDatastaxCredentials agent.githubCreds=AlanGithubCredentials agent.ec2Creds=AlanExperoOnEC2 agent.config=DSEGDemoClusterConfig' % args)
+run('%(cloudburstHome)s/cli.py launch %(name)s DSEGClusterDemo agent.clusterName=%(name)s agent.dseCreds=AlanDatastaxCredentials agent.githubCreds=AlanGithubCredentials agent.ec2Creds=AlanExperoOnEC2 agent.config=DSEGDemoClusterConfig agent.githubBranch=%(branch)s' % args)
 run('%(cloudburstHome)s/cli.py -n %(extra)s execute %(name)s setup' % args)
 run('%(cloudburstHome)s/cli.py -n %(extra)s inspect %(name)s' % args)
 run('%(cloudburstHome)s/cli.py -n -e %(extra)s execute %(name)s schema' % args)
 run('%(cloudburstHome)s/cli.py -n %(extra)s execute %(name)s start' % args)
+run('%(cloudburstHome)s/cli.py -n %(extra)s execute %(name)s data' % args)

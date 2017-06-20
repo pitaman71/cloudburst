@@ -1132,6 +1132,7 @@ botoInstance.terminate()
         <variable name="sshCreds" type="SSHKeypair"/>
         <variable name="dseCreds" type="PasswordCredentials"/>
         <variable name="githubCreds" type="PasswordCredentials"/>
+        <variable name="githubBranch" type="string">develop</variable>
         <variable name="ec2Creds" type="EC2Credentials"/>
         <variable name="cluster" type="EC2Cluster"/>
         <variable name="dsegInstances" type="EC2Instances"/>
@@ -1191,7 +1192,7 @@ machine github.com
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                     <send name="command" onFail="stop">sudo mkdir -p <get>agent.installDir</get></send>
-                    <send name="command" onFail="stop">cd <get>agent.installDir</get> ; sudo git clone --recursive https://github.com/experoinc/graph-gallery-demos.git</send>
+                    <send name="command" onFail="stop">cd <get>agent.installDir</get> ; sudo git clone --recursive https://github.com/experoinc/graph-gallery-demos.git -b <get>agent.githubBranch</get></send>
                 </shell>
             </do>
         </method>
@@ -1305,9 +1306,8 @@ for line in fin:
                 <describe locale="en_US">Create Synthetic data and load into DSE Graph</describe>
                 <shell>
                     <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                    <send name="command" onFail="stop">cd <get>agent.installDir</get>/graph-gallery-demos ; sudo hello-graph/tools/hgGenerate.py --gremlin localhost:8182 --traversalSource finservGraphDemo.g finserv-graph-demo/src/finservGraphDemo.yaml --count 1 --threads 1 --kind vertex --label DatabaseRoot</send>
                     <send name="command" onFail="stop">cd <get>agent.installDir</get>/graph-gallery-demos ; sudo hello-graph/tools/hgLoad.py --server localhost:8182 --gremlin --traversalSource finservGraphDemo.g finserv-graph-demo/src/finservGraphDemo.yaml --source hello-graph/samples/austinTexas.yaml --target LocationWithAddress</send>
-                    <send name="command" onFail="stop">cd <get>agent.installDir</get>/graph-gallery-demos ; sudo hello-graph/tools/hgGenerate.py --gremlin localhost:8182 --traversalSource finservGraphDemo.g finserv-graph-demo/src/finservGraphDemo.yaml --count 1 --threads 1 --kind shape --label FinservDemoShape1 --samples hello-graph/samples/date.py --samples hello-graph/samples/emailSamples.py --samples hello-graph/samples/namedb.yaml</send>
+                    <send name="command" onFail="stop">cd <get>agent.installDir</get>/graph-gallery-demos ; sudo hello-graph/tools/hgGenerate.py --gremlin localhost:8182 --traversalSource finservGraphDemo.g finserv-graph-demo/src/finservGraphDemo.yaml --count 1 --threads 1 --kind shape --label FinservDemoShape2 --samples hello-graph/samples/date.py --samples hello-graph/samples/emailSamples.py --samples hello-graph/samples/namedb.yaml</send>
                 </shell>
             </do>
         </method>
