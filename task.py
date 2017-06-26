@@ -17,16 +17,22 @@ class Task:
 		self.returnValue = None
 
 		self.status = 'BEGIN'
-		if logMethod != None:
-			logMethod(str(self))
+		self.doLog()
 		self.status = 'RUN'
 
 	def __del__(self):
 		self.endTime = datetime.datetime.now()
 		self.status = 'END  '
-		if self.logMethod != None:
-			self.logMethod(str(self))		
+		self.doLog()
 		self.status = 'DONE'
+
+	def doLog(self):
+		if self.logMethod == True:
+			print str(self)
+		elif self.logMethod == False:
+			pass
+		elif self.logMethod != None:
+			self.logMethod(str(self))
 
 	def expectUnits(self,unitType,unitCount):
 		self.unitsExpected[unitType] = unitCount
@@ -48,22 +54,33 @@ class Task:
 
 	def info(self,message):
 		asString = '\n'.join(message) if isinstance(message,list) else str(message)
-		asList   = message if isinstance(message,list) else [str(message)]
-		if self.logMethod:
+		if self.logMethod == True:
+			print asString
+		elif self.logMethod == False:
+			pass
+		elif self.logMethod != None:
 			self.logMethod(asString)
 
 	def warning(self,message):
 		asString = '\n'.join(message) if isinstance(message,list) else str(message)
 		asList   = message if isinstance(message,list) else [str(message)]
-		if self.logMethod:
+		if self.logMethod == True:
+			print asString
+		elif self.logMethod == False:
+			pass
+		elif self.logMethod != None:
 			self.logMethod(asString)
 		self.warnings += asList
 
 	def error(self,message):
 		asString = '\n'.join(message) if isinstance(message,list) else str(message)
 		asList   = message if isinstance(message,list) else [str(message)]
-		if self.logMethod:
-			self.logger(asString)
+		if self.logMethod == True:
+			print asString
+		elif self.logMethod == False:
+			pass
+		elif self.logMethod != None:
+			self.logMethod(asString)
 		self.errors += asList
 
 	def reportUnit(self,unit,now):

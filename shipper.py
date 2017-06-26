@@ -267,7 +267,6 @@ class Shipper:
 
     def postUnpackObject(self,obj,nextRefIsDef,stack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
-#        myTask = task.Task(('postUnpackObject of type %s' % objType),logMethod==self.serializationLog.info(self.serializationLog))
         myTask = task.Task('postUnpackObject of type %s' % objType,logMethod=self.serializationLog.info(self.serializationLog))
 
         result = None
@@ -293,15 +292,17 @@ class Shipper:
                 stack.append(the)
                 self.postUnpackObject(result.__dict__,False,stack)
                 stack.pop()
+            if obj != None and hasattr(obj,'afterPostUnpack'):
+                obj.afterPostUnpack()
         elif type(obj) == dict:
-            result = dict()
             keyOrder = self.attributeOrder(obj,stack)
             if 'lock' in keyOrder:
                 raise RuntimeError('ERROR: lock is in keyOrder for %s\n*** %s' % (obj,'\n*** '.join([str(obj) for obj in stack])))
             for key in keyOrder:
                 value = obj[key]
                 myTask.info('postUnpackObject follows key %s' % str(key))
-                result[key] = self.postUnpackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+                obj[key] = self.postUnpackObject(value,nextRefIsDef or self.refIsDef(stack,key,value),stack)
+            result = obj
         elif self.packAsScalar(obj):
             myTask.info('postUnpackObject value %s' % str(obj))
             result = obj
@@ -315,10 +316,14 @@ class Shipper:
                 for key,value in newMembers.iteritems():
                     result.__dict__[key] = value
                 stack.pop()
+            if obj != None and hasattr(obj,'afterPostUnpack'):
+                obj.afterPostUnpack()
         elif id(obj) not in self.pointers:
             self.pointers[id(obj)] = True
             self.postUnpackObject(obj.__dict__,False,stack)
             result = obj
+            if obj != None and hasattr(obj,'afterPostUnpack'):
+                obj.afterPostUnpack()
         else:
             result = obj
 
@@ -349,6 +354,8 @@ class Shipper:
             stack.append(obj)
             if obj == None:
                 pass
+            elif isinstance(obj,Crate):
+                raise RuntimeError('double-packing Crate case')
             elif type(obj) in (tuple,list):
                 index = 0
                 for item in obj:
@@ -404,6 +411,8 @@ class Shipper:
             stack.append(obj)
             if obj == None:
                 pass
+            elif isinstance(obj,Crate):
+                raise RuntimeError('double-packing Crate case')
             elif type(obj) in (tuple,list):
                 result = []
                 myTask.info('packObject LIST')

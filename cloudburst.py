@@ -58,6 +58,13 @@ def toBool(rvalue):
 def logStderr(text):
     sys.stderr.write('%s\n' % text)
 
+def xmlPrintLocation(elem):
+    result = elem.tag
+    if 'name' in elem.attrib:
+        result += ' \"%s\" ' % elem.get('name')
+    result += ' at %s:%d' % (elem._file_name,elem._start_line_number)
+    return result
+
 def xmlCopy(source):
     target = ElementTree.Element(source.tag)
     target._file_name = source._file_name
@@ -1152,7 +1159,7 @@ class EvalOutcomes:
     def isPossible(self):
         return self.value == 'possible'
 
-    def tostring(self):
+    def __str__(self):
         if self.value == True:
             return 'True'
         elif self.value == False:
@@ -1208,7 +1215,11 @@ class Evaluator:
     def getStringValue(self):
         rvalue = self.getRvalue()
         if rvalue != None:
-            return str(rvalue)
+            tmp = glob.glob(os.path.expanduser(str(rvalue)))
+            if tmp != None and len(tmp) > 0:
+                return tmp[0]
+            else:
+                return str(rvalue)
         elif 'expr' in self.__dict__:
             return ElementTree.tostring(self.expr)
         else:
@@ -1334,11 +1345,7 @@ class Evaluator:
             self.createError('Must call Evaluator.setXML or Evaluator.setString before calling Evaluator.evaluate')
 
     def doXML(self):
-        myTask = None
-        if 'debug' in self.expr.attrib:
-            myTask = task.Task('%s: evaluating expression %s' % (self.label,self.expr.tag))
-        else:
-            myTask = task.Task('%s: evaluating expression %s' % (self.label,self.expr.tag))
+        myTask = task.Task('%s: evaluating expression %s' % (self.label,xmlPrintLocation(self.expr)),logMethod=('debug' in self.expr.attrib))
         childResults = []
         if self.expr.text:
             sub = Evaluator(self.agent,self.context,self.pursue,self.executeMode)
@@ -1476,6 +1483,14 @@ class Evaluator:
             else:
                 self.doDefined(childResults[0])
                 interpreted = True
+        elif self.expr.tag == 'pathExists':
+            text = ''
+            for child in childResults:
+                text += child.getStringValue()
+                text += child.tail
+                self.outcome = self.outcome and child.outcome
+            self.setValue(os.path.exists(text))
+            interpreted = True
         elif self.expr.tag == 'shell':
             children = self.expr.findall('*')
             lastReturnCode = None
@@ -1586,8 +1601,8 @@ class Evaluator:
                         self.setValue(True)
                         interpreted = True
 #                code.interact(local=locals())
-        elif self.expr.tag == 'goalCompleted':
-            goalName = self.expr.get('name')
+        elif self.expr.tag == 'goalCompleted' or self.agent.getDefinitionByTypeAndName('goalProto',self.expr.tag):
+            goalName = self.expr.get('name') if self.expr.tag == 'goalCompleted' else self.expr.tag
             goalConfig = Config('context','Example of completed goal',self.agent.solver)
             goalConfig.setup('goal',self.expr)
             foundGoal = self.agent.findGoal(goalName,goalConfig)
@@ -1601,7 +1616,7 @@ class Evaluator:
                 self.agent.addGoal(subgoal)
                 subgoal.pursue(self.executeMode)
                 self.value = subgoal.isSuccess()
-                subgoal.context.root.returnStateChildren(self.context.root,stmt)
+                subgoal.context.root.returnStateChildren(self.context.root,self.expr)
             else:
                 self.value = False
                 self.outcome = EvalOutcomes().setPossible()
@@ -1628,6 +1643,10 @@ class Goal:
 
     def __str__(self):
         return '%s "%s"' % (self.__class__.__name__,self.name)
+
+    def afterPostUnpack(self):
+        if isinstance(self.parent,shipper.Crate):
+            raise RuntimeError('Incomplete unpacking process')
 
     def attributeOrder(self):
         return ['protoName','name','proto','method','agent','parent','variables','context','errors']
@@ -1730,52 +1749,51 @@ class Goal:
         for preCheck in preChecks:
             self.checkExpr(preCheck)
 
-    def evalConditions(self,condTag,xml):
+    def classifyConditions(self,condTag,xml):
         result = EvalOutcomes()
         result.setTrue()
         conditions = xml.findall(condTag)
+        definite = []
+        possible = []
+        impossible = []
         for condition in conditions:
-            result = result and self.evalCondition(condition[0])
-        return result
+            code = self.evalCondition(condition)
+            if code.isTrue():
+                definite.append(condition)
+            elif code.isFalse():
+                impossible.append(condition)
+            else:
+                possible.append(condition)
+        return (definite,possible,impossible)
 
-    def evalCondition(self,condElement):
+    def evalCondition(self,condParent):
+        condElement = condParent[0]
         evalResult = Evaluator(self.agent,self.context,None,False)
         evalResult.setXML(condElement)
         evalResult.evaluate()
+
+        if self.agent.verboseMode(1) or self.agent.goalsMode(1):
+            print 'COND %s evaluates to %s' % (xmlPrintLocation(condParent),evalResult.getOutcome())
+
         if(evalResult.getOutcome().isTrue()):
             return EvalOutcomes().setTrue() if toBool(evalResult.getRvalue()) else EvalOutcomes().setFalse()
         else:
             return evalResult.getOutcome()
 
-    def solveConditions(self,condTag,xml,executeMode):
-        conditions = xml.findall(condTag)
-        result = True
-        for condition in conditions:
-            code = self.evalCondition(condition[0])
-            if result and code.isPossible():
-                if self.agent.verboseMode(1):
-                    print 'PRECONDITION REQUIRES '+condition[0].tag+' '+str(condition._start_line_number)
-                subgoals = condition[0].findall('goalCompleted')
-                if condition[0].tag == 'goalCompleted':
-                    subgoals.append(condition[0])
-                for xml in subgoals:
-                    if self.agent.verboseMode(1):
-                        print 'PRECONDITION REQUIRES SUBGOALS '+str(condition._start_line_number)
-                    goalName = xml.get('name')
-                    goalConfig = Config('context','Subgoal configuration',self.agent.solver)
-                    goalConfig.setup('goal',xml)
-                    subgoal = Goal()
-                    subgoal.cfgSubGoal(goalName,self,self.context,xml,self.agent.solver.remainingArgString,self.agent)
-                    self.agent.addGoal(subgoal)
-                    if self.agent.verboseMode(1) or self.agent.goalsMode(1):                    
-                        print '# PUSH precondition %s of %s' % (subgoal.name,self.name)
-                    subgoal.pursue(executeMode)
-                    if self.agent.verboseMode(1) or self.agent.goalsMode(1):                    
-                        print '# POP  precondition %s of %s' % (subgoal.name,self.name)
-                    if not subgoal.isSuccess():
-                        result = False
-
-        return result
+    def solveConditions(self,condTag,method,conditions,executeMode):        
+        for condParent in conditions:
+            condElement = condParent[0]
+            evalResult = Evaluator(self.agent,self.context,self,True)
+            evalResult.setXML(condElement)
+            if self.agent.verboseMode(1) or self.agent.goalsMode(1):
+                print 'PUSH COND %s' % (xmlPrintLocation(condParent))
+                evalResult.evaluate()
+                print 'POP  COND %s with result %s' % (xmlPrintLocation(condParent),evalResult.getOutcome())
+                if not evalResult.getOutcome().isTrue():
+                    return False
+                if evalResult.getRvalue() != True:
+                    return False
+        return True
 
     def checkExpr(self,preCheck):
         if self.agent.verboseMode(1):
@@ -1819,9 +1837,9 @@ class Goal:
         result += self.context.toString()
         result += ')'
         if self.proto is not None:
-            result += ' %s:%d' % (self.proto._file_name,self.proto._start_line_number)
+            result += ' goalProto %s:%d' % (self.proto._file_name,self.proto._start_line_number)
         if self.method is not None:
-            result += ' %s:%d' % (self.method._file_name,self.method._start_line_number)
+            result += ' method %s:%d' % (self.method._file_name,self.method._start_line_number)
         return result
 
     def bindToProto(self):
@@ -1859,9 +1877,12 @@ class Goal:
                     checkPostBefore = Evaluator(self.agent,self.context,None,executeMode)
                     checkPostBefore.setXML(post[0])
                     checkPostBefore.evaluate()
-                    canSkip = canSkip and checkPostBefore.value
-            if canSkip and self.agent.verboseMode(1):
-                print 'SKIP '+self.toString()+' because postconditions are already satisfied'
+                    code = checkPostBefore.getRvalue()                    
+                    canSkip = canSkip and code
+                    if not code and (self.agent.verboseMode(1) or self.agent.goalsMode(1)):
+                        print '%s: NO-SKIP because postcondition is not already satisfied' % xmlPrintLocation(post)
+                if canSkip and (self.agent.verboseMode(1) or self.agent.goalsMode(1)):
+                    print '%s: CAN-SKIP  because postconditions are already satisfied' % xmlPrintLocation(self.proto)
 
         if not canSkip and not self.method and self.isSuccess():
             methods = self.agent.getDefinitions('method')
@@ -1872,37 +1893,60 @@ class Goal:
                 return
             methods.reverse()
 
+            methods += self.proto.findall('method')
+
             # look for methods for which <pre> is already solved
             dependent = []
             for method in methods:
                 if self.method == None:
-                    if method.get('targetGoalType') == self.protoName:
-                        code = self.evalConditions('pre',method)
-                        if code.isTrue():
-                            self.method = method
-                            if self.agent.verboseMode(1):
-                                print 'SELECTED '+method.get('name')+' to achieve goal '+self.name
-                        elif code.isFalse():
-                            if self.agent.verboseMode(1):
-                                print 'REJECTED '+method.get('name')+' to achieve goal '+self.name
+                    targetGoalType = method.get('targetGoalType')
+                    if targetGoalType == None or targetGoalType == self.protoName:
+                        (definite,possible,impossible) = self.classifyConditions('pre',method)
+#                        print 'DEBUG: definite = %s' % definite
+#                        print 'DEBUG: possible = %s' % possible
+#                        print 'DEBUG: impossible = %s' % impossible
+                        if len(impossible) > 0:
+                            if self.agent.verboseMode(1) or self.agent.goalsMode(1):
+                                print 'REJECTED '+xmlPrintLocation(method)+' to achieve goal '+self.name
+                        elif len(possible) > 0:
+                            dependent.append(dict(method=method,conditions=possible))
+                            if self.agent.verboseMode(1) or self.agent.goalsMode(1):
+                                print 'QUEUED   '+xmlPrintLocation(method)+' to achieve goal '+self.name                            
                         else:
-                            dependent.append(method)
-                            if self.agent.verboseMode(1):
-                                print 'QUEUED   '+method.get('name')+' to achieve goal '+self.name
+                            self.method = method
+                            if self.agent.verboseMode(1) or self.agent.goalsMode(1):
+                                print 'SELECTED '+ xmlPrintLocation(method)+' to achieve goal '+self.name
 
-            for method in dependent:
-                if self.method == None:                    
-                    code = self.solveConditions('pre',method,executeMode)
+            hasDependents = self.method == None and len(dependent) > 0
+            if self.agent.goalsMode(1) and hasDependents:
+                print '# DEFER   Pursuing this goal until preconditions solved: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+' canSkip:'+('True' if canSkip else 'False')+')'
+                for item in dependent:
+                    method = item['method']
+                    conditions = item['conditions']
+                    print '#'
+                    for condition in conditions:
+                        print '# %s DEPENDS ON %s' % (xmlPrintLocation(method),xmlPrintLocation(condition))
+
+            for item in dependent:
+                method = item['method']
+                conditions = item['conditions']
+                if self.method == None:
+                    code = self.solveConditions('pre',method,conditions,executeMode)
                     if code == True:
                         self.method = method
                     elif self.agent.verboseMode(1):
-                        print 'UNSOLVABLE '+method.get('name')+' to achieve goal '+self.name
+                        print 'UNSOLVABLE '+xmlPrintLocation(method)+' to achieve goal '+self.name
 
             if self.method == None:
                 self.createError('No method found to solve %s' % self.toString())
 
         if self.agent.goalsMode(1):
-            print '# RESUME Pursuing this goal after preconditions solved: '+self.toString()+' (success: '+('True' if self.isSuccess() else 'False')+' canSkip:'+('True' if canSkip else 'False')+')'
+            if canSkip:
+                print '# SKIP    Pursuing this goal since postcondition solved: %s (success: %s canSkip: %s)' % (self.toString(),('True' if self.isSuccess() else 'False'),('True' if canSkip else 'False'))
+            elif hasDependents:
+                print '# RESUME  Pursuing this goal after preconditions solved: %s (success: %s canSkip: %s)' % (self.toString(),('True' if self.isSuccess() else 'False'),('True' if canSkip else 'False'))
+            else:
+                print '# PROCEED Pursuing this goal with no preconditions to solve: %s (success: %s canSkip: %s)' % (self.toString(),('True' if self.isSuccess() else 'False'),('True' if canSkip else 'False'))
 
         if not canSkip and self.isSuccess():
             ready = self.checkPre(True)
@@ -2371,12 +2415,19 @@ class ConfigNode:
             self.elements = []
 
     def initStateNode(self,solver,context,xml):
+        if solver.verboseMode(1):
+            print "BEGIN initStateNode(%s) %s" % (self.getPath('.'),xmlPrintLocation(xml))
+
         if xml.tag == 'struct':
             self.setupStruct()
         elif xml.tag == 'list':
             self.setupList()
         node = self.lookupTermList(True,[xml.get('name')],solver)
         node.initStateChildren(solver,context,xml)
+
+        if solver.verboseMode(1):
+            print "END   initStateNode(%s) %s" % (self.getPath('.'),xmlPrintLocation(xml))
+
         return node
 
     def initStateChildren(self,solver,context,xml):
