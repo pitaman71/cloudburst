@@ -2228,10 +2228,14 @@ class ConfigWrap:
 
     def __getattr__(self,attr):
         myNode = self.__dict__['__node__']
-        sub = myNode.lookupTermList(self.__dict__['createMode'],[attr],myNode.rootConfig.solver)
-        if isinstance(sub,ConfigNode):
-            return ConfigWrap(sub,self.__dict__['createMode'])
-        return sub
+        if hasattr(myNode,'lookupTermList'):
+            sub = myNode.lookupTermList(self.__dict__['createMode'],[attr],myNode.rootConfig.solver)
+            if isinstance(sub,ConfigNode):
+                return ConfigWrap(sub,self.__dict__['createMode'])
+            return sub
+        elif hasattr(myNode,attr):
+            return getattr(myNode,attr)
+        raise RuntimeError('%s has no attribute %s' % (myNode,attr))
 
     def __setattr__(self,attr,value):
         myNode = self.__dict__['__node__']

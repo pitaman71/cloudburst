@@ -12,7 +12,7 @@ scriptPath = os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser(description="Cloudburst test #2")
 parser.add_argument('--name',default='dsegdemo1')
-parser.add_argument('--branch',default='develop')
+parser.add_argument('--branch',default='master')
 parser.add_argument('--clean',default=False,action='store_true')
 argObj = parser.parse_args()
 

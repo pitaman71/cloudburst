@@ -14,9 +14,9 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     name='cloudburst',
 
-    version='0.0.1',
+    version='0.1',
 
-    description='A cloud application framework',
+    description='A framework for self-configuring, self-managing, agent-based cloud applications',
     long_description=long_description,
 
     # The project's main homepage.
