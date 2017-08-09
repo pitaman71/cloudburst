@@ -14,6 +14,8 @@ from subprocess import PIPE, Popen
 from threading  import Thread,RLock
 import shipper
 
+scriptPath = os.path.dirname(os.path.realpath(__file__))
+
 try:
     from Queue import Queue, Empty
 except ImportError:
@@ -726,35 +728,49 @@ class Agency:
         self.lock.release()
 
 
+    def resolvePath(self,file):
+        if '/' in file:
+            return file
+
+        prefixes = ['']
+        if 'CBPATH' in os.environ:
+            prefixes += os.environ['CBPATH'].split(':')
+        prefixes += [scriptPath]
+        for prefix in prefixes:
+            raw = '%s/%s' % (prefix,file)
+            if prefix == '':
+                raw = file
+            candidates = glob.glob(os.path.expanduser(raw))
+            for candidate in candidates:
+                if os.path.isfile(candidate):
+                    return candidate
+        return None
+
     def readFileXML(self,programFile,mandatory=True):
-        actualPaths = glob.glob(os.path.expanduser(programFile))
-        if len(actualPaths) == 0:
+        hit = self.resolvePath(programFile)
+        if hit == None:
             if mandatory:
                 self.createError('Input file does not exist: '+programFile)
             else:
                 print('Input file does not exist: '+programFile)
-
-        for actualPath in actualPaths:
-            if not os.path.isfile(actualPath):
-                if mandatory:
-                    self.createError('Input file does not exist: '+actualPath)
-                else:
-                    print('Input file does not exist: '+actualPath)
-            else:
-                if self.verboseMode(1):
-                    print 'Reading '+actualPath
-                xmlDoc = ElementTree.parse(actualPath,parser=LineNumberingParser(actualPath))
-                self.readDefinitions(xmlDoc)
-                self.sourceFiles.append(actualPath)
+        else:
+            if self.verboseMode(1):
+                print 'Reading '+hit
+            xmlDoc = ElementTree.parse(hit,parser=LineNumberingParser(hit))
+            self.readDefinitions(xmlDoc)
+            self.sourceFiles.append(hit)
 
     def readDefinitions(self,xmlDefinitions):
         for element in xmlDefinitions.findall('*'):
-            if 'name' in element.attrib:
-                self.addDefinition(element)
+            if element.tag == 'include':
+                self.readFileXML(element.get('file'))
             else:
-                self.createError('%s:%d: attribute name must be present on all top-level XML nodes, which are considered to be Cloudburst definitions' % (element._file_name,element._start_line_number))
-            if element.tag == 'variable' or element.tag == 'list' or element.tag == 'struct':
-                self.addStateDef(element)
+                if 'name' in element.attrib:
+                    self.addDefinition(element)
+                else:
+                    self.createError('%s:%d: attribute name must be present on all top-level XML nodes, which are considered to be Cloudburst definitions' % (element._file_name,element._start_line_number))
+                if element.tag == 'variable' or element.tag == 'list' or element.tag == 'struct':
+                    self.addStateDef(element)
 
     def appendName(xmlDefn,defnPath):
         defnPath.append(xmlDefn.get('name'))
