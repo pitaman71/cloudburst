@@ -145,6 +145,19 @@ def xmlLookupDefnPath(elem,defnPath):
     else:
         return lookupRelPath(elem,defnPath)
 
+def xmlGetTagValueScoped(elem,tag):
+    if not isinstance(elem,ElementTree.Element):
+        return None
+    if elem.tag == tag:
+        return elem.text
+    else:
+        matching = elem.findall(tag);
+        if matching != None and len(matching) > 0:
+            return xmlGetTagValueScoped(matching[len(matching)-1],tag)
+    if elem.parent != None:
+        return xmlGetTagValueScoped(elem.parent,tag)
+    return None
+
 def lookupRelPath(obj,defnPath):
     if len(defnPath) == 0:
         return obj
@@ -1038,7 +1051,7 @@ class Agent:
     def finalMode(self):
         return self.solver.args.final != None
 
-    def interpolateInner(self,context,elt,execute,errHandler):
+    def interpolateInner(self,context,elt,execute,task):
         cmd = ''
         if elt.text:
             cmd += elt.text
@@ -1053,7 +1066,7 @@ class Agent:
                     cmd += sub.getStringValue()
                 else:
                     for error in sub.errors:
-                        errHandler.errors.append(error)
+                        task.error(error)
                     cmd += ElementTree.tostring(child)
             else:
                 cmd += child.text
@@ -1397,6 +1410,8 @@ class Evaluator:
                     myTask.error('Wrong number of arguments for operator '+self.expr.get('name'))
                 elif (not childResults[0].isSuccess()):
                     myTask.error(childResults[0].errors)
+                elif (childResults[0].getRvalue() == None):
+                    myTask.error('%s: Computed null value for this child ' % xmlPrintLocation(self.expr))
                 else:
                     self.doUnaryOperator(self.expr.get('name'),childResults[0])
         elif self.expr.tag == 'get':
@@ -1508,31 +1523,84 @@ class Evaluator:
             self.setValue(os.path.exists(text))
             interpreted = True
         elif self.expr.tag == 'shell':
+            sys.stdout.flush()
             children = self.expr.findall('*')
-            lastReturnCode = None
+            lastReturnCode = (None,None)
+            shellCommand = None
             for child in children:
+                subTask = task.Task('%s: %s' % (self.label,xmlPrintLocation(child)),logMethod=('debug' in self.expr.attrib))
+                if(child.tag == 'command'):
+                    shellCommand = self.agent.interpolateInner(self.context,child,self.executeMode,subTask)
                 if(child.tag == 'send'):
-                    sub = Evaluator(self.agent,self.context,self.pursue,self.executeMode)
-                    sub.setXML(child)
-                    sub.evaluate()
-                    if not sub.isSuccess():
-                        myTask.error('Cannot evaluate <send>')
-                    else:
-                        cmd = sub.getStringValue()
-                        cmdList = glob.glob(os.path.expanduser(cmd))
-                        if len(cmdList) == 0:
-                            cmdList = [cmd]
-                            #self.createError('Cannot expand this shell expression:\n%s\n' % cmd)
-                        for cmd in cmdList:
-                            cmd = re.sub('\s*\n\s*',' ',cmd.strip())                        
+                    cmd = self.agent.interpolateInner(self.context,child,self.executeMode,subTask)
+                    cmdList = glob.glob(os.path.expanduser(cmd))
+                    if len(cmdList) == 0:
+                        cmdList = [cmd]
+
+                    for cmd in cmdList:
+                        if myTask.hasErrors():
+                            pass
+                        elif self.executeMode:
+                            if(shellCommand != None):
+                                cmd = re.sub('\s*\n\s*',';',cmd.strip())
+
                             if self.agent.echoMode():
-                                print "BEGIN <shell><send>%s</send></shell>" % cmd
+                                print "BEGIN <shell><send>%s%s</send></shell>" % (shellCommand+' ' if shellCommand != None else '',cmd)
+
+#                            scriptFile = tempfile.NamedTemporaryFile(prefix='script')
                             timeout = None
                             if 'timeout' in child.attrib:
                                 timeout = child.get('timeout')
-                            lastReturnCode = pexpect.run(cmd,withexitstatus=1,timeout=timeout)
+
+                            teeSuffix = ''
+                            stepLabel = xmlGetTagValueScoped(child,'label')
+                            if stepLabel != None and stepLabel != '':
+                                teeSuffix = ' | tee -a %s.out' % stepLabel
+#                            print 'DEBUG: %s teeSuffix is %s' % (xmlPrintLocation(child),teeSuffix)
+                            if(shellCommand != None):
+                                lastReturnCode = pexpect.run(shellCommand+' '+cmd+teeSuffix,withexitstatus=1,timeout=timeout)
+                            else:
+                                scriptFile = open('tempScript','wt')
+                                print >>scriptFile, cmd
+                                scriptFile.flush()
+                                scriptFile.close()
+
+                                if self.agent.verboseMode(1):
+                                    print 'SCRIPT is stored in temporary aux file %s' % scriptFile.name
+
+                                lastReturnCode = pexpect.run('/bin/bash %s%s' % (scriptFile.name,teeSuffix),withexitstatus=1,timeout=timeout)
+
+                            if self.agent.verboseMode(1):
+                                print lastReturnCode[0]
+                            if 'name' in child.attrib:
+                                stdoutVar = self.context.root.lookupTermList(True,[child.get('name'),'stdout'],self)
+                                rcVar = self.context.root.lookupTermList(True,[child.get('name'),'rc'],self)
+                                stdoutVar.setValue(lastReturnCode[0])
+                                rcVar.setValue(lastReturnCode[1])
+                            onFail = 'stop'
+                            if 'onFail' in child.attrib:
+                                onFail = child.get('onFail')
+                            if lastReturnCode[1] != 0 and onFail != 'ignore':
+                                subTask.error('COMMAND RC=%d : %s' % (lastReturnCode[1],cmd))
+                                lines = lastReturnCode[0].split('\n')
+                                for line in lines:
+                                    myTask.error(line.decode('utf8'))
                             if self.agent.echoMode():
-                                print "END   <shell><send>%s</send></shell>" % cmd
+                                print "END   <shell><send>%s%s</send></shell>" % (shellCommand+' ' if shellCommand != None else '',cmd)
+                        else:   
+                            print "PLAN  %s" % cmd
+                elif(child.tag == 'receive'):
+                    cmd = self.agent.interpolateInner(self.context,child,self.executeMode,subTask)
+
+                    print "EXPECT %s" % cmd
+                    if myTask.hasErrors():
+                        print "ERRORS %s" % cmd
+                    elif self.executeMode:
+                        match = re.search(pattern)
+                        if match:
+                            self.useMatch(child,match)
+                myTask.collect(subTask)
+            sys.stdout.flush()
             valueType = 'isZero'
             if 'value' in self.expr.attrib:
                 valueType = self.expr.get('value')
@@ -1565,7 +1633,7 @@ class Evaluator:
             #info['file'] = file
             #info['path'] = file.name
             self.agent.tempFiles.append(file)
-            print >>file, self.agent.interpolateInner(self.context,self.expr,self.executeMode,self)
+            print >>file, self.agent.interpolateInner(self.context,self.expr,self.executeMode,myTask)
             file.flush()
             interpreted = True
             self.value = file.name
@@ -2078,80 +2146,7 @@ class Goal:
                     self.execute_r(context,sub,executeMode)
             if self.agent.verboseMode(1):
                 print 'END   Task %s' % stmt.get('name')
-        elif stmt.tag == 'shell':
-            sys.stdout.flush()
-            children = stmt.findall('*')
-            lastCommand = (None,None)
-            shellCommand = None
-            for child in children:
-                if(child.tag == 'command'):
-                    shellCommand = self.agent.interpolateInner(self.context,child,executeMode,self)
-                if(child.tag == 'send'):
-                    cmd = self.agent.interpolateInner(self.context,child,executeMode,self)
-                    cmdList = glob.glob(os.path.expanduser(cmd))
-                    if len(cmdList) == 0:
-                        cmdList = [cmd]
-
-                    for cmd in cmdList:
-                        if self.hasErrors():
-                            pass
-                        elif executeMode:
-                            if(shellCommand != None):
-                                cmd = re.sub('\s*\n\s*',';',cmd.strip())
-
-                            if self.agent.echoMode():
-                                print "BEGIN <shell><send>%s%s</send></shell>" % (shellCommand+' ' if shellCommand != None else '',cmd)
-
-#                            scriptFile = tempfile.NamedTemporaryFile(prefix='script')
-                            timeout = None
-                            if 'timeout' in child.attrib:
-                                timeout = child.get('timeout')
-
-                            if(shellCommand != None):
-                                lastCommand = pexpect.run(shellCommand+' '+cmd,withexitstatus=1,timeout=timeout)
-                            else:
-                                scriptFile = open('tempScript','wt')
-                                print >>scriptFile, cmd
-                                scriptFile.flush()
-                                scriptFile.close()
-
-                                if self.agent.verboseMode(1):
-                                    print 'SCRIPT is stored in temporary aux file %s' % scriptFile.name
-
-                                lastCommand = pexpect.run('/bin/bash %s' % scriptFile.name,withexitstatus=1,timeout=timeout)
-
-                            if self.agent.verboseMode(1):
-                                print lastCommand[0]
-                            if 'name' in child.attrib:
-                                stdoutVar = context.lookupTermList(True,[child.get('name'),'stdout'],self)
-                                rcVar = context.lookupTermList(True,[child.get('name'),'rc'],self)
-                                stdoutVar.setValue(lastCommand[0])
-                                rcVar.setValue(lastCommand[1])
-                            onFail = 'stop'
-                            if 'onFail' in child.attrib:
-                                onFail = child.get('onFail')
-                            if lastCommand[1] != 0 and onFail != 'ignore':
-                                self.createErrorAt(child,'COMMAND RC=%d : %s' % (lastCommand[1],cmd))
-                                lines = lastCommand[0].split('\n')
-                                for line in lines:
-                                    self.createErrorAt(child,line.decode('utf8'))
-                            if self.agent.echoMode():
-                                print "END   <shell><send>%s%s</send></shell>" % (shellCommand+' ' if shellCommand != None else '',cmd)
-                        else:   
-                            print "PLAN  %s" % cmd
-                elif(child.tag == 'receive'):
-                    cmd = self.agent.interpolateInner(self.context,child,executeMode,self)
-
-                    print "EXPECT %s" % cmd
-                    if self.hasErrors():
-                        print "ERRORS %s" % cmd
-                    elif executeMode:
-                        match = re.search(pattern)
-                        if match:
-                            self.useMatch(child,match)
-            sys.stdout.flush()
-
-        elif stmt.tag == 'op' or stmt.tag == 'get' or stmt.tag == 'python' or stmt.tag == 'tempFile' or stmt.tag == 'update':
+        elif stmt.tag == 'op' or stmt.tag == 'get' or stmt.tag == 'python' or stmt.tag == 'tempFile' or stmt.tag == 'update' or stmt.tag == 'shell':
             evaluator = Evaluator(self.agent,self.context,None,executeMode)
             evaluator.setXML(stmt)
             evaluator.evaluate()

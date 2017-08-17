@@ -83,6 +83,12 @@ class Task:
 			self.logMethod(asString)
 		self.errors += asList
 
+	def hasErrors(self):
+		return self.errors != None and len(self.errors) > 0
+
+	def collect(self,other):
+		self.errors += other.errors
+
 	def reportUnit(self,unit,now):
 		result = '%5s %s' % (self.status,self.purpose)
 		result += ' | %d/%d %s' % (self.unitsConsumed[unit],self.unitsExpected[unit],unit)
