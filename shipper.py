@@ -7,6 +7,21 @@ import datetime
 
 import sys
 
+def getClass(className):
+#    for moduleName,moduleDefn in sys.modules.iteritems():
+#        print 'DEBUG: wrapYaml has access to module %s' % moduleName
+    klass = None
+    if hasattr(sys.modules[__name__],className):
+        klass = getattr(sys.modules[__name__],className)
+    if klass == None:
+        for moduleName,moduleDefn in sys.modules.iteritems():
+            if hasattr(moduleDefn,className):
+                klass = getattr(moduleDefn,className)
+#                       print 'DEBUG: found definition of %s.%s' % (moduleName,yaml['type'])
+    if klass == None:
+        raise RuntimeError('Unable to find class definition for %s' % yaml['type'])
+    return klass
+
 class Crate:
     def __init__(self):
         self.typeName = None
@@ -115,17 +130,29 @@ class Shipper:
         self.module = module
         if module == None:
             self.module = sys.modules[__name__]
+        self.nameToGlobal = dict()
+        self.globalToName = dict()
+
+    def addGlobal(self,obj,name):
+        self.nameToGlobal[name] = obj
+        self.globalToName[obj] = name
 
     def hasKey(self,obj):
+        if obj in self.globalToName:
+            return True
         return False
 
     def getKey(self,obj):
+        if obj in self.globalToName:
+            return self.globalToName[obj]
         return None
 
     def getType(self,obj):
         return obj.__class__.__name__
 
     def lookupKey(self,key):
+        if key in self.nameToGlobal:
+            return self.nameToGlobal[key]
         if key in self.defByName:
 #            print 'DEBUG: Found %s = %s' % (key,self.defByName[key])
             return self.defByName[key]
@@ -339,7 +366,7 @@ class Shipper:
         return False
 
     def packAsScalar(self,obj):
-        return isinstance(obj,bool) or isinstance(obj,str) or isinstance(obj,int) or isinstance(obj,float) or isinstance(obj,unicode) or isinstance(obj,datetime.datetime)
+        return isinstance(obj,bool) or isinstance(obj,str) or isinstance(obj,int) or isinstance(obj,long) or isinstance(obj,float) or isinstance(obj,unicode) or isinstance(obj,datetime.datetime)
 
     def prepackObject(self,obj,nextRefIsDef,stack,keyStack):
         objType = (obj.__class__.__name__ if hasattr(obj,'__class__') else type(obj))
