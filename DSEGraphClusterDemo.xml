@@ -1,0 +1,523 @@
+<cloudburst name="DSEGraphClusterDemo">
+    <agent name="DSEGraphClusterDemo">
+        <variable name="clusterName" type="string"/>
+        <variable name="experoClient" type="string"/>
+        <variable name="experoProject" type="string"/>
+        <variable name="config" type="EC2ClusterConfiguration"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
+        <variable name="dseVersion" type="NumericVersion3">5.1.2</variable>
+        <variable name="dseCreds" type="PasswordCredentials"/>
+        <variable name="githubCreds" type="PasswordCredentials"/>
+        <variable name="githubBranch" type="string">develop</variable>
+        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="cluster" type="EC2Cluster"/>
+        <variable name="oltpInstances" type="EC2Instances"/>
+        <variable name="olapInstances" type="EC2Instances"/>
+        <variable name="seeds" type="EC2Instances"/>
+        <variable name="installDir" type="localFilePath">/var/cloudburst</variable>
+        <pre><defined><get>agent.config</get></defined></pre>
+        <pre><defined><get>agent.dseVersion</get></defined></pre>
+        <pre><defined><get>agent.dseCreds</get></defined></pre>
+        <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        <pre><defined><get>agent.clusterName</get></defined></pre>
+        <pre><defined><get>agent.experoClient</get></defined></pre>
+        <pre><defined><get>agent.experoProject</get></defined></pre>
+        <goalProto name="installDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="fromDatastaxApt" symbol="goal" targetGoalType="installDSEGNode">
+            <shell>
+                <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.public_ip_address</get> using apt-get</describe>
+                <label>installJava1.8</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send name="command" onFail="stop">while sudo fuser /var/lib/dpkg/lock &gt;/dev/null 2&gt;&amp;1; do echo "waiting for dpkg to stabilize ..."; sleep 10; done ; echo "dpkg appears ready"</send>
+                <send name="command" onFail="stop">sudo apt-add-repository ppa:webupd8team/java -y</send>
+                <send name="command" onFail="stop">sudo apt-get update</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">sudo apt-get install oracle-java8-installer -y</send>
+                <send name="command" onFail="stop">sudo java -version</send>
+            </shell>
+            <shell>
+                <describe locale="en_US">Make sure DSE full product package is installed on <get>goal.node.public_ip_address</get> using apt-get</describe>
+                <label>installDSE</label>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send name="command" onFail="stop">echo "deb https://<get>agent.dseCreds.user</get>:<python name="urllib.quote_plus"><get>agent.dseCreds.password</get></python>@debian.datastax.com/enterprise stable main" | sudo tee -a /etc/apt/sources.list.d/datastax.sources.list</send>
+                <send name="command" onFail="stop">curl -L https://debian.datastax.com/debian/repo_key | sudo apt-key add -</send>
+                <send name="command" onFail="stop">sudo apt-get update -y</send>
+                <send name="command" onFail="stop">sudo apt-get install -y --allow-unauthenticated dse-full=<get>agent.dseVersion</get>-1 dse=<get>agent.dseVersion</get>-1 dse-libgraph=<get>agent.dseVersion</get>-1 dse-libsolr=<get>agent.dseVersion</get>-1 dse-libtomcat=<get>agent.dseVersion</get>-1 dse-liblog4j=<get>agent.dseVersion</get>-1 dse-libspark=<get>agent.dseVersion</get>-1 dse-libhadoop2-client-native=<get>agent.dseVersion</get>-1 dse-libcassandra=<get>agent.dseVersion</get>-1 dse-libhadoop2-client=<get>agent.dseVersion</get>-1</send>
+            </shell>
+            <do>
+                <describe locale="en_US">Install Python packages with PIP on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo apt-get -y install python-pip</send>
+                    <send name="command" onFail="stop">sudo pip install pyyaml pexpect flask flask-cors flask-compress gremlinpython==3.2.5 neo4j-driver sqlalchemy</send>
+                </shell>
+            </do>
+            <tempFile name="netrc">
+                <describe locale="en_US">Create temp file with netrc for github</describe>
+machine github.com
+  login <get>agent.githubCreds.user</get>
+  password <get>agent.githubCreds.password</get>
+            </tempFile>
+            <shell>
+                <describe locale="en_US">Copy Netrc credentials file to <get>goal.node.public_ip_address</get> using scp</describe>
+                <label>cpYumConfigForDatastax</label>
+
+                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>goal.netrc</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:~/.netrc
+                </send>
+            </shell>
+            <tempFile name="ssh_config">
+                <describe locale="en_US">Create temp file with ssh_config for github</describe>
+Host github.com
+  StrictHostKeyChecking no
+            </tempFile>
+            <shell>
+                <describe locale="en_US">Copy SSH config file to <get>goal.node.public_ip_address</get> using scp</describe>
+                <label>cpYumConfigForDatastax</label>
+
+                <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>goal.ssh_config</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:~/.ssh/config
+                </send>
+            </shell>
+
+
+
+            <do>
+                <describe locale="en_US">Create installation directory and clone microservice repository</describe>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mkdir -p <get>agent.installDir</get></send>
+                    <send name="command" onFail="stop">cd <get>agent.installDir</get> ; sudo git clone --recursive https://github.com/experoinc/graph-gallery-demos.git -b <get>agent.githubBranch</get></send>
+                </shell>
+            </do>
+        </method>
+        <goalProto name="buildDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="withMaven" symbol="goal" targetGoalType="buildDSEGNode">
+            <shell>
+                <describe locale="en_US">Build Datastax Enterprise Graph on <get>goal.node.public_ip_address</get> using Maven</describe>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>echo "nothing to do for build"</send>
+            </shell>                            
+        </method>
+        <goalProto name="configureDSEGNode">
+            <variable name="node" type="EC2Node"/>
+            EC2GroupConfiguration
+        </goalProto>
+        <method name="cbConfigureDSEGNode" symbol="goal" targetGoalType="configureDSEGNode">
+            <do>
+                <describe locale="en_US">Adjust cassandra.yaml to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:/etc/dse/cassandra/cassandra.yaml cassandra.yaml.original</send>
+                </shell>
+                <python>
+                    <code>
+import re
+fin = open('cassandra.yaml.original','r')
+fout = open('cassandra.yaml.fixed','w')
+seedString = ','.join([instance.private_ip_address for instance in <set>agent.seeds</set>])
+for line in fin:
+    # using private IP for seeds causes "Unable to gossip with any seeds" failure
+    line = re.sub('- seeds: "\S+"','- seeds: "%s"' % seedString,line)
+    line = re.sub('^(\#\s*)?listen_address: \S+','listen_address: <get>goal.node.private_ip_address</get>',line)
+    line = re.sub('^(\#\s*)?broadcast_rpc_address: \S+','broadcast_rpc_address: <get>goal.node.private_ip_address</get>',line)
+    # using public IP for rpc_address causes binding failure
+    line = re.sub('^(\#\s*)?rpc_address: \S+','rpc_address: 0.0.0.0',line)
+    line = re.sub('\# num_tokens:.*','num_tokens: 32',line)
+    # documentation says use fully-qualified Java class names for authenticator and authorizer, but that causes "class not found" failure 
+    line = re.sub('authenticator:.*','authenticator: AllowAllAuthenticator',line)
+    line = re.sub('authorizer:.*','authorizer: AllowAllAuthorizer',line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get>  cassandra.yaml.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra.yaml.fixed /etc/dse/cassandra/cassandra.yaml</send>
+                </shell>
+            </do>
+            <do>
+                <describe locale="en_US">Adjust cassandra-env.sh to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:/etc/dse/cassandra/cassandra-env.sh cassandra-env.sh.original</send>
+                </shell>
+                <python>
+                    <referenceDoc><url>https://www.liquidweb.com/kb/error-failed-to-connect-to-127-0-0-17199-connection-refused-cassandra-solved/</url></referenceDoc>
+                    <code>
+import re
+fin = open('cassandra-env.sh.original','r')
+fout = open('cassandra-env.sh.fixed','w')
+for line in fin:
+    line = line.decode('utf8')
+    line = re.sub('\# JVM_OPTS="\$JVM_OPTS -Djava.rmi.server.hostname=.*"','JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname=<get>goal.node.public_ip_address</get>"',line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> cassandra-env.sh.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra-env.sh.fixed /etc/dse/cassandra/cassandra-env.sh</send>
+                    <send name="command" onFail="stop">echo "-Dcassandra.consistent.rangemovement=false" | sudo tee -a /etc/dse/cassandra/jvm.options</send>
+                    <send name="command" onFail="stop">echo "-Dcassandra.ignore_dc=true" | sudo tee -a /etc/dse/cassandra/jvm.options</send>
+                </shell>
+            </do>
+
+            <do>
+                <describe locale="en_US">Adjust /etc/default/dse (environment config) on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:/etc/default/dse dse-env</send>
+                </shell>
+                <python>
+                    <code>
+import re
+fin = open('dse-env','r')
+fout = open('dse-env.fixed','w')
+for line in fin:
+    line = line.decode('utf8')
+    line = re.sub('GRAPH_ENABLED=.*','GRAPH_ENABLED=%s' % (1 if <get>goal.node.GRAPH_ENABLED</get> else 0),line)
+    line = re.sub('SPARK_ENABLED=.*','SPARK_ENABLED=%s' % (1 if <get>goal.node.SPARK_ENABLED</get> else 0),line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> dse-env.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:dse-env</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv dse-env /etc/default/dse</send>
+                </shell>
+            </do>
+
+        </method>
+        <goalProto name="startDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="startUsingHelperScript" symbol="goal" targetGoalType="startDSEGNode">
+            <describe locale="en_US">Start Cassandra+Datastax Enterprise Graph service daemons on <get>goal.node.public_ip_address</get></describe>
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>sudo service dse start</send>
+                <send>echo "ALTER KEYSPACE dse_leases WITH REPLICATION = {'class' : 'NetworkTopologyStrategy', 'Analytics' : 1};" | cqlsh</send>
+            </shell>                            
+        </method>
+        <goalProto name="schemaDSEG">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="schemaDSEGMethod" symbol="goal" targetGoalType="schemaDSEG">
+        </method>
+        <goalProto name="dataDSEG">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="dataDSEGMethod" symbol="goal" targetGoalType="dataDSEG">
+        </method>
+        <goalProto name="stopDSEGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="stopUsingHelperScript" symbol="goal" targetGoalType="stopDSEGNode">
+            <describe locale="en_US">Stop Cassandra+Datastax Enterprise Graph service daemons on <get>goal.node.public_ip_address</get></describe>
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>sudo service dse stop</send>
+            </shell>                            
+        </method>
+        <goalProto name="setup" symbol="goal">
+            <describe locale="en-US">Allocate a cluster of EC2 nodes to run Datastax Enterprise Graph + Cassandra</describe>
+        </goalProto>
+        <method name="setupUsingBoto3" symbol="goal" targetGoalType="setup">
+            <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+            <pre><goalCompleted name="installEC2CLITools"/></pre>
+            <pre><goalCompleted name="installAnyJava"/></pre>
+            <do><goalCompleted name="generateSSHKeypair">
+                <variable name="sshCreds"><get>agent.sshCreds</get></variable>
+            </goalCompleted></do>
+            <python>
+                <describe>Load SSH keypair into AWS EC2</describe>
+                <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+bfile = open('<get>agent.sshCreds.publicKey.localFilePath</get>','rb')
+botoResource.import_key_pair(KeyName='<get>agent.sshCreds.keyName</get>',PublicKeyMaterial=bfile.read())
+                </code>
+            </python>
+            <python>
+                <describe>Request instances from EC2</describe>
+                <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+
+oltpInstances = botoResource.create_instances(KeyName='<get>agent.sshCreds.keyName</get>',InstanceType='<get>agent.config.oltpNodes.instanceType</get>',ImageId='<get>agent.config.oltpNodes.image</get>', MinCount=<get>agent.config.oltpNodes.numNodes</get>, MaxCount=<get>agent.config.oltpNodes.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>agent.config.oltpNodes.securityGroupId</get>'],AssociatePublicIpAddress=True)])
+<set>agent.seeds</set> = []
+<set>agent.oltpInstances</set> = []
+
+olapInstances = botoResource.create_instances(KeyName='<get>agent.sshCreds.keyName</get>',InstanceType='<get>agent.config.olapNodes.instanceType</get>',ImageId='<get>agent.config.olapNodes.image</get>', MinCount=<get>agent.config.olapNodes.numNodes</get>, MaxCount=<get>agent.config.olapNodes.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>agent.config.olapNodes.securityGroupId</get>'],AssociatePublicIpAddress=True)])
+<set>agent.seeds</set> = []
+<set>agent.olapInstances</set> = []
+
+index = 0
+for instance in oltpInstances:
+    instance.wait_until_running()
+    instance.load()
+    instanceName = '<get>agent.config.oltpNodes.instancePrefix</get>%d' % index
+    instance.create_tags(Tags=[{'Key':'Name','Value':instanceName},{'Key':'experoOwner','Value':'<get>agent.ec2Creds.user</get>'},{'Key':'experoClusterName','Value':'<get>agent.clusterName</get>'},{'Key':'experoClient','Value':'<get>agent.experoClient</get>'},{'Key':'experoProject','Value':'<get>agent.experoProject</get>'}])
+    instanceData = EC2Node(arg_id=instance.id,arg_public_ip_address=instance.public_ip_address,arg_private_ip_address=instance.private_ip_address)
+    setattr(instanceData,'GRAPH_ENABLED',<get>agent.config.oltpNodes.DSEG_GRAPH_ENABLED</get>)
+    setattr(instanceData,'SPARK_ENABLED',<get>agent.config.oltpNodes.DSEG_SPARK_ENABLED</get>)
+    <set>agent.oltpInstances</set>.append(instanceData)
+    index += 1
+
+for instance in olapInstances:
+    instance.wait_until_running()
+    instance.load()
+    instanceName = '<get>agent.config.olapNodes.instancePrefix</get>%d' % index
+    instance.create_tags(Tags=[{'Key':'Name','Value':instanceName},{'Key':'experoOwner','Value':'<get>agent.ec2Creds.user</get>'},{'Key':'experoClusterName','Value':'<get>agent.clusterName</get>'},{'Key':'experoClient','Value':'<get>agent.experoClient</get>'},{'Key':'experoProject','Value':'<get>agent.experoProject</get>'}])
+    instanceData = EC2Node(arg_id=instance.id,arg_public_ip_address=instance.public_ip_address,arg_private_ip_address=instance.private_ip_address)
+    setattr(instanceData,'GRAPH_ENABLED',<get>agent.config.olapNodes.DSEG_GRAPH_ENABLED</get>)
+    setattr(instanceData,'SPARK_ENABLED',<get>agent.config.olapNodes.DSEG_SPARK_ENABLED</get>)
+    <set>agent.olapInstances</set>.append(instanceData)
+    index += 1
+
+if <get>agent.config.oltpNodes.isCassandraNode</get>:
+    instance = oltpInstances[0]
+    instanceData = EC2Node(arg_id=instance.id,arg_public_ip_address=instance.public_ip_address,arg_private_ip_address=instance.private_ip_address)
+    <set>agent.seeds</set>.append(instanceData)
+                </code>
+            </python>
+            <python>
+                <describe locale="en-US">Wait 180s for EC2 instances to finish initialization</describe>
+                <code>
+import time
+time.sleep(180)
+                </code>
+            </python>
+            <find symbol="instance">
+                <describe>Install and build Datastax Enterprise Graph + Cassandra on each instance</describe>
+                <in><get>agent.oltpInstances</get></in>
+                <do>
+                    <goalCompleted name="installDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                    <goalCompleted name="buildDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+            <find symbol="instance">
+                <describe>Install and build Datastax Enterprise Graph + Cassandra on each instance</describe>
+                <in><get>agent.olapInstances</get></in>
+                <do>
+                    <goalCompleted name="installDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                    <goalCompleted name="buildDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+            <find symbol="instance">
+                <describe>Configure Datastax Enterprise Graph + Cassandra on each instance</describe>
+                <in><get>agent.oltpInstances</get></in>
+                <do>
+                    <goalCompleted name="configureDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            <variable name="GRAPH_ENABLED"><get>instance.GRAPH_ENABLED</get></variable>
+                            <variable name="SPARK_ENABLED"><get>instance.SPARK_ENABLED</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+            <find symbol="instance">
+                <describe>Configure Datastax Enterprise Graph + Cassandra on each instance</describe>
+                <in><get>agent.olapInstances</get></in>
+                <do>
+                    <goalCompleted name="configureDSEGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            <variable name="GRAPH_ENABLED"><get>instance.GRAPH_ENABLED</get></variable>
+                            <variable name="SPARK_ENABLED"><get>instance.SPARK_ENABLED</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+        </method>
+        <goalProto name="schema" symbol="goal">
+            <describe locale="en-US">Load schema into graph DB</describe>
+        </goalProto>
+        <method name="schemaCompound" symbol="goal" targetGoalType="schema">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.oltpInstances</get></in>
+                    <do>
+                        <goalCompleted name="startDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+                <find symbol="instance">
+                    <in><get>agent.olapInstances</get></in>
+                    <do>
+                        <goalCompleted name="startDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+            <do>
+                <goalCompleted name="schemaDSEG">
+                    <variable name="node" type="EC2Node"><get>agent.seeds[0]</get></variable>
+                </goalCompleted>
+            </do>
+        </method>
+        <goalProto name="data" symbol="goal">
+            <describe locale="en-US">Load data into graph DB</describe>
+        </goalProto>
+        <method name="dataMethod" symbol="goal" targetGoalType="data">
+            <do>
+                <goalCompleted name="dataDSEG">
+                    <variable name="node" type="EC2Node"><get>agent.seeds[0]</get></variable>
+                </goalCompleted>
+            </do>
+        </method>
+        <goalProto name="ssh" symbol="goal">
+            <describe locale="en-US">Connect to one of the servers</describe>
+        </goalProto>
+        <method name="usingSSH" symbol="goal" targetGoalType="ssh">
+            <shell>
+                <send>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>agent.seeds[0].public_ip_address</get></send>
+            </shell>
+        </method>
+        <goalProto name="start" symbol="goal">
+            <describe locale="en-US">Start Datastax Enterprise Graph + Cassandra service daemons</describe>
+            <pre><defined><get>agent.config</get></defined></pre>
+            <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        </goalProto>
+        <method name="startCompound" symbol="goal" targetGoalType="start">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.oltpInstances</get></in>
+                    <do>
+                        <goalCompleted name="startDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+                <find symbol="instance">
+                    <in><get>agent.olapInstances</get></in>
+                    <do>
+                        <goalCompleted name="startDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+        </method>
+        <goalProto name="stop" symbol="goal">
+            <describe locale="en-US">Stop Datastax Enterprise Graph + Cassandra service daemons</describe>
+            <pre><defined><get>agent.config</get></defined></pre>
+            <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        </goalProto>
+        <method name="stopCompound" symbol="goal" targetGoalType="stop">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.oltpInstances</get></in>
+                    <do>
+                        <goalCompleted name="stopDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+                <find symbol="instance">
+                    <in><get>agent.olapInstances</get></in>
+                    <do>
+                        <goalCompleted name="stopDSEGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+        </method>
+        <goalProto name="terminate" symbol="goal">
+            <describe locale="en-US">Terminate all EC2 nodes allocated for Datastax Enterprise Graph + Cassandra for this agent</describe>
+        </goalProto>
+        <method name="terminateUsingBoto3" symbol="goal" targetGoalType="terminate">
+            <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+            <pre><goalCompleted name="installEC2CLITools"/></pre>
+            <do>
+            <find symbol="instance">
+                <describe>Terminate all EC2 instances used by this Agent</describe>
+                <in><get>agent.oltpInstances</get></in>
+                <do>
+                    <python>
+                        <describe>Terminate instance from EC2</describe>
+                        <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+botoInstance = botoResource.Instance('<get>instance.id</get>')
+print 'Sending terminate signal to EC2 via boto3 for instance id=%s with private ip=%s' % ('<get>instance.id</get>','<get>instance.private_ip_address</get>')
+botoInstance.terminate()
+                        </code>
+                    </python>
+                </do>
+            </find>
+            <find symbol="instance">
+                <describe>Terminate all EC2 instances used by this Agent</describe>
+                <in><get>agent.olapInstances</get></in>
+                <do>
+                    <python>
+                        <describe>Terminate instance from EC2</describe>
+                        <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+botoInstance = botoResource.Instance('<get>instance.id</get>')
+print 'Sending terminate signal to EC2 via boto3 for instance id=%s with private ip=%s' % ('<get>instance.id</get>','<get>instance.private_ip_address</get>')
+botoInstance.terminate()
+                        </code>
+                    </python>
+                </do>
+            </find>
+            </do>
+        </method>
+    </agent>
+</cloudburst>

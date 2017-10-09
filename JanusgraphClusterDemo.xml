@@ -1,0 +1,369 @@
+<cloudburst name="JanusgraphClusterDemo">
+    <agent name="JanusGraphClusterDemo">
+        <variable name="clusterName" type="string"/>
+        <variable name="experoClient" type="string"/>
+        <variable name="experoProject" type="string"/>
+        <variable name="config" type="EC2ClusterConfiguration"/>
+        <variable name="sshCreds" type="SSHKeypair"/>
+        <variable name="jgVersion" type="NumericVersion3">0.1.1</variable>
+        <variable name="githubCreds" type="PasswordCredentials"/>
+        <variable name="githubBranch" type="string">master</variable>
+        <variable name="ec2Creds" type="EC2Credentials"/>
+        <variable name="cluster" type="EC2Cluster"/>
+        <variable name="oltpInstances" type="EC2Instances"/>
+        <variable name="olapInstances" type="EC2Instances"/>
+        <variable name="seeds" type="EC2Instances"/>
+        <variable name="installDir" type="localFilePath">/var/cloudburst</variable>
+        <pre><defined><get>agent.config</get></defined></pre>
+        <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        <pre><defined><get>agent.clusterName</get></defined></pre>
+        <goalProto name="installJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="fromReleasedZip" symbol="goal" targetGoalType="installJGNode">
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.public_ip_address</get> using webupd8team</describe>
+                <label>installJava1.8</label>
+                <send name="command" onFail="stop">sudo apt-get update</send>
+                <send name="command" onFail="stop">sudo apt-add-repository ppa:webupd8team/java -y</send>
+                <send name="command" onFail="stop">sudo apt-get update</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">sudo apt-get install oracle-java8-installer -y</send>
+                <send name="command" onFail="stop">sudo java -version</send>
+                <send name="command" onFail="stop">sudo apt-get --assume-yes install maven</send>
+            </shell>
+            <shell>
+                <describe locale="en_US">Download JanusGraph onto <get>goal.node.public_ip_address</get> using wget and unzip</describe>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>sudo mkdir -p <get>agent.installDir</get></send>
+                <send>sudo chown <get>agent.sshCreds.user</get> <get>agent.installDir</get></send>
+                <send>cd <get>agent.installDir</get> ; wget https://github.com/JanusGraph/janusgraph/releases/download/v<get>agent.jgVersion</get>/janusgraph-<get>agent.jgVersion</get>-hadoop2.zip</send>
+                <send>cd <get>agent.installDir</get> ; unzip janusgraph-<get>agent.jgVersion</get>-hadoop2.zip</send>
+                <send>cd <get>agent.installDir</get> ; ln -s janusgraph-<get>agent.jgVersion</get>-hadoop2 janusgraph</send>
+            </shell>                            
+        </method>
+        <method name="fromGitFork" symbol="goal" targetGoalType="installJGNode">
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.public_ip_address</get> using webupd8team</describe>
+                <label>installJava1.8</label>
+                <send name="command" onFail="stop">sudo apt-get update</send>
+                <send name="command" onFail="stop">sudo apt-add-repository ppa:webupd8team/java -y</send>
+                <send name="command" onFail="stop">sudo apt-get update</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">echo debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections</send>
+                <send name="command" onFail="stop">sudo apt-get install oracle-java8-installer -y</send>
+                <send name="command" onFail="stop">sudo java -version</send>
+            </shell>
+            <shell>
+                <describe locale="en_US">Download JanusGraph onto <get>goal.node.public_ip_address</get> using git (clone)</describe>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>sudo mkdir -p <get>agent.installDir</get></send>
+                <send>sudo chown <get>agent.sshCreds.user</get> <get>agent.installDir</get></send>
+                <send>cd <get>agent.installDir</get> ; git clone https://github.com/JanusGraph/janusgraph.git</send>
+                <send>sudo apt-get --assume-yes install maven</send>
+                <send>cd <get>agent.installDir</get>/janusgraph ; sudo mvn clean -DskipTests</send>
+                <send>ps -aef | grep cassandra | grep -v grep | tr -s ' ' | cut -d' ' -f 2 | xargs sudo kill -9</send>
+            </shell>                            
+        </method>
+        <goalProto name="buildJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="nothingToDo" symbol="goal" targetGoalType="buildJGNode">
+        </method>
+        <goalProto name="configureJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="sed" symbol="goal" targetGoalType="configureJGNode">
+            <do>
+                <describe locale="en_US">Adjust cassandra.yaml to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:<get>agent.installDir</get>/janusgraph/conf/cassandra/cassandra.yaml cassandra.yaml.original</send>
+                </shell>
+                <python>
+                    <code>
+import re
+fin = open('cassandra.yaml.original','r')
+fout = open('cassandra.yaml.fixed','w')
+seedString = ','.join([instance.private_ip_address for instance in <set>agent.seeds</set>])
+seen = dict(broadcast_rpc_address=False,rpc_address=False)
+for line in fin:
+    # using private IP for seeds causes "Unable to gossip with any seeds" failure
+    line = re.sub('- seeds: "\S+"','- seeds: "%s"' % seedString,line)
+    line = re.sub('listen_address: \S+','listen_address: <get>goal.node.private_ip_address</get>',line)
+    seen['broadcast_rpc_address'] = seen['broadcast_rpc_address'] or (re.search('broadcast_rpc_address: \S+',line) != None)
+    line = re.sub('broadcast_rpc_address: \S+','broadcast_rpc_address: <get>goal.node.private_ip_address</get>',line)
+    # using public IP for rpc_address causes binding failure
+    line = re.sub('^rpc_address: \S+','rpc_address: 0.0.0.0',line)
+    line = re.sub('\# num_tokens:.*','num_tokens: 32',line)
+    # documentation says use fully-qualified Java class names for authenticator and authorizer, but that causes "class not found" failure 
+    # line = re.sub('authenticator:.*','authenticator: PasswordAuthenticator',line)
+    # line = re.sub('authorizer:.*','authorizer: CassandraAuthorizer',line)
+    fout.write(line)
+
+if not seen['broadcast_rpc_address']:
+    fout.write('broadcast_rpc_address: <get>goal.node.private_ip_address</get>\n')
+
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> cassandra.yaml.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra.yaml.fixed <get>agent.installDir</get>/janusgraph/conf/cassandra/cassandra.yaml</send>
+                </shell>
+            </do>
+            <do>
+                <describe locale="en_US">Adjust gremlin-server.yaml to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:<get>agent.installDir</get>/janusgraph/conf/gremlin-server/gremlin-server.yaml gremlin-server.yaml.original</send>
+                </shell>
+                <python>
+                    <code>
+import re
+fin = open('gremlin-server.yaml.original','r')
+fout = open('gremlin-server.yaml.fixed','w')
+for line in fin:
+    line = line.decode('utf8')
+    line = re.sub('^host: localhost','host: 0.0.0.0',line)
+    fout.write(line)
+    if re.search('serializers:',line) != None:
+        fout.write("""  - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerGremlinV2d0, config: { ioRegistries: [org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerIoRegistryV2d0]  }} # application/vnd.gremlin-v2.0+json\n""")
+        fout.write("""  - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerV3d0, config: { useMapperFromGraph: graph }}         # application/json,application/vnd.gremlin-v3.0+json\n""")
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> gremlin-server.yaml.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv gremlin-server.yaml.fixed <get>agent.installDir</get>/janusgraph/conf/gremlin-server/gremlin-server.yaml</send>
+                </shell>
+            </do>
+            <do>
+                <describe locale="en_US">Adjust cassandra-env.sh to match best practice initial values on <get>goal.node.public_ip_address</get></describe>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:<get>agent.installDir</get>/janusgraph/conf/cassandra/cassandra-env.sh cassandra-env.sh.original</send>
+                </shell>
+                <python>
+                    <referenceDoc><url>https://www.liquidweb.com/kb/error-failed-to-connect-to-127-0-0-17199-connection-refused-cassandra-solved/</url></referenceDoc>
+                    <code>
+import re
+fin = open('cassandra-env.sh.original','r')
+fout = open('cassandra-env.sh.fixed','w')
+for line in fin:
+    line = line.decode('utf8')
+    line = re.sub('\# JVM_OPTS="\$JVM_OPTS -Djava.rmi.server.hostname=.*"','JVM_OPTS="$JVM_OPTS -Djava.rmi.server.hostname=<get>goal.node.public_ip_address</get>"',line)
+    fout.write(line)
+                    </code>
+                </python>
+                <shell>
+                    <send name="command" onFail="stop">scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> cassandra-env.sh.fixed <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get>:</send>
+                </shell>
+                <shell>
+                    <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                    <send name="command" onFail="stop">sudo mv cassandra-env.sh.fixed <get>agent.installDir</get>/janusgraph/conf/cassandra/cassandra-env.sh</send>
+                </shell>
+            </do>
+        </method>
+        <goalProto name="loadSchemaJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="loadSchemaJGNodeOverSSH" symbol="goal" targetGoalType="loadSchemaJGNode">
+            <do>
+            </do>
+        </method>
+        <goalProto name="startJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="startUsingHelperScript" symbol="goal" targetGoalType="startJGNode">
+            <describe locale="en_US">Start Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>cd <get>agent.installDir</get>/janusgraph ; sudo bin/janusgraph.sh start</send>
+            </shell>                            
+        </method>
+        <goalProto name="checkPythonBindingJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="the" symbol="goal" targetGoalType="checkPythonBindingJGNode">
+            <describe locale="en_US">Check Python bindings</describe>
+                <python>
+                    <code>
+from gremlin_python import statics
+from gremlin_python.structure.graph import Graph
+from gremlin_python.process.traversal import P
+from gremlin_python.process.graph_traversal import __
+from gremlin_python.process.strategies import *
+from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
+
+gremlinServer = '<get>goal.node.public_ip_address</get>:8182'
+graph = Graph()
+g.V().count().next()
+                    </code>
+                </python>
+        </method>
+        <goalProto name="stopJGNode">
+            <variable name="node" type="EC2Node"/>
+        </goalProto>
+        <method name="stopUsingHelperScript" symbol="goal" targetGoalType="stopJGNode">
+            <describe locale="en_US">Stop Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
+            <shell>
+                <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
+                <send>cd <get>agent.installDir</get>/janusgraph ; sudo bin/janusgraph.sh stop</send>
+            </shell>                            
+        </method>
+        <goalProto name="setup" symbol="goal">
+            <describe locale="en-US">Allocate a cluster of EC2 nodes to run JanusGraph + Cassandra</describe>
+        </goalProto>
+        <method name="setupUsingBoto3" symbol="goal" targetGoalType="setup">
+            <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+            <pre><goalCompleted name="installEC2CLITools"/></pre>
+            <pre><goalCompleted name="installAnyJava"/></pre>
+            <do><goalCompleted name="generateSSHKeypair">
+                <variable name="sshCreds"><get>agent.sshCreds</get></variable>
+            </goalCompleted></do>
+            <python>
+                <describe>Load SSH keypair into AWS EC2</describe>
+                <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+bfile = open('<get>agent.sshCreds.publicKey.localFilePath</get>','rb')
+botoResource.import_key_pair(KeyName='<get>agent.sshCreds.keyName</get>',PublicKeyMaterial=bfile.read())
+                </code>
+            </python>
+            <python>
+                <describe>Request instances from EC2</describe>
+                <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+instances = botoResource.create_instances(KeyName='<get>agent.sshCreds.keyName</get>',InstanceType='<get>agent.config.oltpNodes.instanceType</get>',ImageId='<get>agent.config.oltpNodes.image</get>', MinCount=<get>agent.config.oltpNodes.numNodes</get>, MaxCount=<get>agent.config.oltpNodes.numNodes</get>,NetworkInterfaces=[dict(DeviceIndex=0,Groups=['<get>agent.config.oltpNodes.securityGroupId</get>'],AssociatePublicIpAddress=True)])
+<set>agent.seeds</set> = []
+<set>agent.oltpInstances</set> = []
+
+if <get>agent.config.oltpNodes.isCassandraNode</get>:
+    instance = instances[0]
+    instanceData = EC2Node(arg_id=instance.id,arg_public_ip_address=instance.public_ip_address,arg_private_ip_address=instance.private_ip_address)
+    <set>agent.seeds</set>.append(instanceData)
+index = 0
+for instance in instances:
+    instance.wait_until_running()
+    instance.load()
+    instanceName = '<get>agent.config.oltpNodes.instancePrefix</get>%d' % index
+    instance.create_tags(Tags=[{'Key':'Name','Value':instanceName},{'Key':'experoOwner','Value':'<get>agent.ec2Creds.user</get>'},{'Key':'experoClusterName','Value':'<get>agent.clusterName</get>'}])
+    instanceData = EC2Node(arg_id=instance.id,arg_public_ip_address=instance.public_ip_address,arg_private_ip_address=instance.private_ip_address)
+    <set>agent.oltpInstances</set>.append(instanceData)
+    index += 1
+                </code>
+            </python>
+            <python>
+                <describe locale="en-US">Wait 180s for apt-get repositories on EC2 instances to stabilize</describe>
+                <code>
+import time
+time.sleep(180)
+                </code>
+            </python>
+            <find symbol="instance">
+                <describe>Install and build JanusGraph + Cassandra on each instance</describe>
+                <in><get>agent.oltpInstances</get></in>
+                <do>
+                    <goalCompleted name="installJGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                    <goalCompleted name="buildJGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+            <find symbol="instance">
+                <describe>Configure JanusGraph + Cassandra on each instance</describe>
+                <in><get>agent.oltpInstances</get></in>
+                <do>
+                    <goalCompleted name="configureJGNode">
+                        <struct name="node" type="EC2Node">
+                            <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                            <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                        </struct>
+                    </goalCompleted>
+                </do>
+            </find>                
+        </method>
+        <goalProto name="start" symbol="goal">
+            <describe locale="en-US">Start JanusGraph + Cassandra service daemons</describe>
+            <pre><defined><get>agent.config</get></defined></pre>
+            <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        </goalProto>
+        <method name="startCompound" symbol="goal" targetGoalType="start">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.oltpInstances</get></in>
+                    <do>
+                        <goalCompleted name="startJGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+        </method>
+        <goalProto name="stop" symbol="goal">
+            <describe locale="en-US">Stop JanusGraph + Cassandra service daemons</describe>
+            <pre><defined><get>agent.config</get></defined></pre>
+            <pre><defined><get>agent.ec2Creds</get></defined></pre>
+        </goalProto>
+        <method name="stopCompound" symbol="goal" targetGoalType="stop">
+            <do>
+                <find symbol="instance">
+                    <in><get>agent.oltpInstances</get></in>
+                    <do>
+                        <goalCompleted name="stopJGNode">
+                            <struct name="node" type="EC2Node">
+                                <variable name="public_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.public_ip_address</get></variable>
+                                <variable name="private_ip_address" type="usa.darpa.rfc971.ipv4address"><get>instance.private_ip_address</get></variable>
+                            </struct>
+                        </goalCompleted>
+                    </do>
+                </find>                
+            </do>
+        </method>
+        <goalProto name="terminate" symbol="goal">
+            <describe locale="en-US">Terminate all EC2 nodes to run JanusGraph + Cassandra for this agent</describe>
+        </goalProto>
+        <method name="terminateUsingBoto3" symbol="goal" targetGoalType="terminate">
+            <pre><goalCompleted name="installToolViaPIP"><variable name="toolName">boto3</variable></goalCompleted></pre>
+            <pre><goalCompleted name="installEC2CLITools"/></pre>
+            <do>
+            <find symbol="instance">
+                <describe>Terminate all EC2 instances used by this Agent</describe>
+                <in><get>agent.oltpInstances</get></in>
+                <do>
+                    <python>
+                        <describe>Terminate instance from EC2</describe>
+                        <code>
+import boto3
+botoSession = boto3.session.Session(region_name='<get>agent.config.region</get>',aws_access_key_id='<get>agent.ec2Creds.accessKey</get>',aws_secret_access_key='<get>agent.ec2Creds.secretKey</get>')
+botoResource = botoSession.resource('ec2')
+botoInstance = botoResource.Instance('<get>instance.id</get>')
+print 'Sending terminate signal to id=%s private ip=%s' % ('<get>instance.id</get>','<get>instance.private_ip_address</get>')
+botoInstance.terminate()
+                        </code>
+                    </python>
+                </do>
+            </find>
+            </do>
+        </method>
+    </agent>
+</cloudburst>
