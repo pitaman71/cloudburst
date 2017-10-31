@@ -33,18 +33,19 @@
                 <send name="command" onFail="stop">sudo apt-get install oracle-java8-installer -y</send>
                 <send name="command" onFail="stop">sudo java -version</send>
                 <send name="command" onFail="stop">sudo apt-get --assume-yes install maven</send>
+                <send name="command" onFail="stop">sudo apt-get --assume-yes install zip unzip</send>
             </shell>
             <shell>
                 <describe locale="en_US">Download JanusGraph onto <get>goal.node.public_ip_address</get> using wget and unzip</describe>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                 <send>sudo mkdir -p <get>agent.installDir</get></send>
                 <send>sudo chown <get>agent.sshCreds.user</get> <get>agent.installDir</get></send>
-                <send>cd <get>agent.installDir</get> ; wget https://github.com/JanusGraph/janusgraph/releases/download/v<get>agent.jgVersion</get>/janusgraph-<get>agent.jgVersion</get>-hadoop2.zip</send>
-                <send>cd <get>agent.installDir</get> ; unzip janusgraph-<get>agent.jgVersion</get>-hadoop2.zip</send>
-                <send>cd <get>agent.installDir</get> ; ln -s janusgraph-<get>agent.jgVersion</get>-hadoop2 janusgraph</send>
+                <send>cd <get>agent.installDir</get> ';' wget https://github.com/JanusGraph/janusgraph/releases/download/v<get>agent.jgVersion</get>/janusgraph-<get>agent.jgVersion</get>-hadoop2.zip</send>
+                <send>cd <get>agent.installDir</get> ';' unzip janusgraph-<get>agent.jgVersion</get>-hadoop2.zip</send>
+                <send>cd <get>agent.installDir</get> ';' ln -s janusgraph-<get>agent.jgVersion</get>-hadoop2 janusgraph</send>
             </shell>                            
         </method>
-        <method name="fromGitFork" symbol="goal" targetGoalType="installJGNode">
+        <method name="fromGitFork" symbol="goal" targetGoalType="installJGNode-DISABLED">
             <shell>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                 <describe locale="en_US">Make sure Java 1.8 is installed on <get>goal.node.public_ip_address</get> using webupd8team</describe>
@@ -62,9 +63,9 @@
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
                 <send>sudo mkdir -p <get>agent.installDir</get></send>
                 <send>sudo chown <get>agent.sshCreds.user</get> <get>agent.installDir</get></send>
-                <send>cd <get>agent.installDir</get> ; git clone https://github.com/JanusGraph/janusgraph.git</send>
+                <send>cd <get>agent.installDir</get> ';' git clone https://github.com/JanusGraph/janusgraph.git</send>
                 <send>sudo apt-get --assume-yes install maven</send>
-                <send>cd <get>agent.installDir</get>/janusgraph ; sudo mvn clean -DskipTests</send>
+                <send>cd <get>agent.installDir</get>/janusgraph ';' sudo mvn clean -DskipTests</send>
                 <send>ps -aef | grep cassandra | grep -v grep | tr -s ' ' | cut -d' ' -f 2 | xargs sudo kill -9</send>
             </shell>                            
         </method>
@@ -97,7 +98,6 @@ for line in fin:
     line = re.sub('broadcast_rpc_address: \S+','broadcast_rpc_address: <get>goal.node.private_ip_address</get>',line)
     # using public IP for rpc_address causes binding failure
     line = re.sub('^rpc_address: \S+','rpc_address: 0.0.0.0',line)
-    line = re.sub('\# num_tokens:.*','num_tokens: 32',line)
     # documentation says use fully-qualified Java class names for authenticator and authorizer, but that causes "class not found" failure 
     # line = re.sub('authenticator:.*','authenticator: PasswordAuthenticator',line)
     # line = re.sub('authorizer:.*','authorizer: CassandraAuthorizer',line)
@@ -131,7 +131,7 @@ for line in fin:
     line = re.sub('^host: localhost','host: 0.0.0.0',line)
     fout.write(line)
     if re.search('serializers:',line) != None:
-        fout.write("""  - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerGremlinV2d0, config: { ioRegistries: [org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerIoRegistryV2d0]  }} # application/vnd.gremlin-v2.0+json\n""")
+        fout.write("""  - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerGremlinV2d0, config: { useMapperFromGraph: graph }}         # application/json,application/vnd.gremlin-v3.0+json\n""")
         fout.write("""  - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerV3d0, config: { useMapperFromGraph: graph }}         # application/json,application/vnd.gremlin-v3.0+json\n""")
                     </code>
                 </python>
@@ -183,7 +183,7 @@ for line in fin:
             <describe locale="en_US">Start Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
             <shell>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                <send>cd <get>agent.installDir</get>/janusgraph ; sudo bin/janusgraph.sh start</send>
+                <send>cd <get>agent.installDir</get>/janusgraph ';' sudo bin/janusgraph.sh start</send>
             </shell>                            
         </method>
         <goalProto name="checkPythonBindingJGNode">
@@ -213,7 +213,7 @@ g.V().count().next()
             <describe locale="en_US">Stop Cassandra+JanusGraph service daemons on <get>goal.node.public_ip_address</get></describe>
             <shell>
                 <command>ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -i <get>agent.sshCreds.privateKey.localFilePath</get> <get>agent.sshCreds.user</get>@<get>goal.node.public_ip_address</get></command>
-                <send>cd <get>agent.installDir</get>/janusgraph ; sudo bin/janusgraph.sh stop</send>
+                <send>cd <get>agent.installDir</get>/janusgraph ';' sudo bin/janusgraph.sh stop</send>
             </shell>                            
         </method>
         <goalProto name="setup" symbol="goal">
@@ -262,10 +262,10 @@ for instance in instances:
                 </code>
             </python>
             <python>
-                <describe locale="en-US">Wait 180s for apt-get repositories on EC2 instances to stabilize</describe>
+                <describe locale="en-US">Wait <get>agent.config.oltpNodes.instanceWaitSeconds</get>s for apt-get repositories on EC2 instances to stabilize</describe>
                 <code>
 import time
-time.sleep(180)
+time.sleep(<get>agent.config.oltpNodes.instanceWaitSeconds</get>)
                 </code>
             </python>
             <find symbol="instance">
